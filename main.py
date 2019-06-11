@@ -1,3 +1,5 @@
+
+# In[1]:
 from crawler.NaverCrawler import NaverCrawler
 from crawler.NaverWorldCrawler import NaverWorldCrawler
 from crawler.NaverTopMarketCapCrawler import NaverTopMarketCapCrawler
@@ -11,6 +13,8 @@ import matplotlib.pyplot as plt
 import datetime as dt
 import numpy as np
 from sklearn.linear_model import LinearRegression
+
+# In[2]:
 
 def makeDataFrame():
     crawler = NaverCrawler.create(targetName='KPI200')
@@ -146,14 +150,14 @@ def showGraphK10KOSPI200():
 
     
 if __name__ == "__main__":
-    pass
+    # pass
     # topK(10)
     #034220
-    # codes = topK(10)
-    # crawler = NaverCapFromCodeCrawler.create()
-    # for code in codes:
-    #     print(crawler.crawling(code))
-    # dataFrame()
+    codes = topK(10)
+    crawler = NaverCapFromCodeCrawler.create()
+    for code in codes:
+        print(crawler.crawling(code))
+    dataFrame()
 
 
 
