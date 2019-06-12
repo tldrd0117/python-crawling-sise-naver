@@ -11,5 +11,9 @@ class NaverResultData:
         return newData
     def format(self, value):
         return float(value.replace(',', '').replace('%',''))
+    def value(self):
+        return [self.close, self.diff, self.rate, self.volume, self.price]
+    def index(self):
+        return self.date
     def __str__(self):
         return f'date:{self.date}, close:{self.close}, diff:{self.diff} rate:{self.rate}, volume:{self.volume}, price:{self.price}'

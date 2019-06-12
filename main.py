@@ -1,3 +1,7 @@
+
+
+# In[0]:
+
 from crawler.NaverCrawler import NaverCrawler
 from crawler.NaverWorldCrawler import NaverWorldCrawler
 from crawler.NaverTopMarketCapCrawler import NaverTopMarketCapCrawler
@@ -5,12 +9,17 @@ from crawler.NaverCapFromCodeCrawler import NaverCapFromCodeCrawler
 from crawler.NaverStockCrawler import NaverStockCrawler
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
+
+
 import pandas as pd
 from functools import reduce
 import matplotlib.pyplot as plt
 import datetime as dt
 import numpy as np
 from sklearn.linear_model import LinearRegression
+
+
+# In[1]:
 
 def makeDataFrame():
     crawler = NaverCrawler.create(targetName='KPI200')
@@ -144,9 +153,25 @@ def showGraphK10KOSPI200():
     plt.legend(loc=0)
     plt.grid(True, color='0.7', linestyle=':', linewidth=1)
 
+# In[2]:
+crawler = NaverCrawler.create(targetName='KPI200')
+date = NaverDate.create(startDate='2019-01-01', endDate='2019-05-04')
+kospi200 = crawler.crawling(dateData=date)
+df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
+for v in kospi200:
+    df.loc[v.index()] = v.value()
+df['대비'] = df['종가'] / df['종가'].shift(-1)
+df
+
+# In[3]:
+df2 = pd.DataFrame(index=[0,1,2,3], columns=['a','b','c','d'])
+df2.loc[0] = [1,2,3,4]
+df2.loc[1] = [5,6,7,8]
+df2.loc[2] = [9,10,11,12]
+df2.loc[3] = [13,14,15,16]
+df2.shift(-1)
     
-if __name__ == "__main__":
-    pass
+# if __name__ == "__main__":
     # topK(10)
     #034220
     # codes = topK(10)
@@ -161,3 +186,5 @@ if __name__ == "__main__":
    
 
     
+
+#%%

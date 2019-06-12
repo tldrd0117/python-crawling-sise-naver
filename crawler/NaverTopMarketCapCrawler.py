@@ -66,9 +66,9 @@ class NaverTopMarketCapCrawler:
                 elif endRank < curRank:
                     isRunning = False
                     break
-            print('pageNo:' + str(pageNo))
-            for value in data:
-                print(value)
+            # print('pageNo:' + str(pageNo))
+            # for value in data:
+                # print(value)
             # print(data)
             if soup.find('td', class_='pgRR'):
                 pageNo += 1
