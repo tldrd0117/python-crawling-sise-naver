@@ -42,7 +42,7 @@ class NaverStockCrawler:
             for one in splitData:
                 date = NaverDate.formatDate(date=one[0])
                 # print(dateData.startDate)
-                print(date)
+                # print(date)
                 # print(dateData.endDate)
                 if dateData.startDate <= date and date <= dateData.endDate :
                     resultData = NaverStockResultData.create(
@@ -57,9 +57,9 @@ class NaverStockCrawler:
                 elif dateData.startDate > date:
                     isRunning = False
                     break
-            print('pageNo:' + str(pageNo))
-            for value in data:
-                print(value)
+            # print('pageNo:' + str(pageNo))
+            # for value in data:
+                # print(value)
             # print(data)
             if soup.find('td', class_='pgRR'):
                 pageNo += 1

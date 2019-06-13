@@ -40,7 +40,7 @@ class NaverTopMarketCapCrawler:
             strings = list(itertools.chain(*values))
             #13개씩 자름
             splitData = [strings[i:i + 13] for i in range(0, len(strings), 13)]
-            print(splitData)
+            # print(splitData)
             for one in splitData:
                 # print(dateData.startDate)
                 # print(dateData.endDate)

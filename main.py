@@ -75,7 +75,7 @@ def showLinearRegression(df):
 def topK(num):
     crawler = NaverTopMarketCapCrawler.create()
     data = crawler.crawling([1,num])
-    codes = { item.code  for item in data }
+    codes = [ {'code':item.code, 'name':item.name}  for item in data ]
     return codes
 
 def k10FromDate():
@@ -150,23 +150,44 @@ def showGraphK10KOSPI200():
     plt.legend(loc=0)
     plt.grid(True, color='0.7', linestyle=':', linewidth=1)
 
-# In[3]:
+# In[3]: 코스피 가져오기
 crawler = NaverCrawler.create(targetName='KPI200')
-date = NaverDate.create(startDate='2019-01-01', endDate='2019-05-04')
+date = NaverDate.create(startDate='2018-06-01', endDate='2019-05-31')
 kospi200 = crawler.crawling(dateData=date)
 df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
 for v in kospi200:
     df.loc[v.index()] = v.value()
-df['대비'] = df['종가'] / df['종가'].shift(-1)
 df
 
-# In[4]:
-df2 = pd.DataFrame(index=[0,1,2,3], columns=['a','b','c','d'])
-df2.loc[0] = [1,2,3,4]
-df2.loc[1] = [5,6,7,8]
-df2.loc[2] = [9,10,11,12]
-df2.loc[3] = [13,14,15,16]
-df2.shift(-1)
+# In[4]: 월 평균 값 
+monthly_df = df.resample('M', how={'종가':np.mean})
+monthly_df
+
+# In[5]: 모멘텀 구하기
+monthly_df['종가'][-1] - monthly_df['종가']
+# In[6]: 30종목 종가
+prices = dict()
+targets = topK(30)
+date = NaverDate.create(startDate='2018-06-01', endDate='2019-05-31')
+for target in targets:
+    crawler = NaverStockCrawler.create(target['code'])
+    data = crawler.crawling(date)
+    prices[target['name']] = { NaverDate.formatDate(item.date) : item.close for item in data }
+topdf = pd.DataFrame(prices)
+topdf
+
+# In[7]: 30종목 종가
+
+
+# In[7]: 30종목 월 평균 값
+# topdf.to_hdf('30종목')
+# In[5]:
+# df2 = pd.DataFrame(index=[0,1,2,3], columns=['a','b','c','d'])
+# df2.loc[0] = [1,2,3,4]
+# df2.loc[1] = [5,6,7,8]
+# df2.loc[2] = [9,10,11,12]
+# df2.loc[3] = [13,14,15,16]
+# df2.shift(-1)
     
 
 
