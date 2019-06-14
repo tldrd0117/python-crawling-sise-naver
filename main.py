@@ -165,19 +165,33 @@ monthly_df
 
 # In[5]: 모멘텀 구하기
 monthly_df['종가'][-1] - monthly_df['종가']
-# In[6]: 30종목 종가
+# In[6]: 30종목 종가 버그 있음
 prices = dict()
 targets = topK(30)
 date = NaverDate.create(startDate='2018-06-01', endDate='2019-05-31')
 for target in targets:
+    print(target,'collect...')
     crawler = NaverStockCrawler.create(target['code'])
     data = crawler.crawling(date)
-    prices[target['name']] = { NaverDate.formatDate(item.date) : item.close for item in data }
+    prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
 topdf = pd.DataFrame(prices)
 topdf
 
-# In[7]: 30종목 종가
+# In[7]: 30종목 월 평균 값
+monthly_topdf = topdf.resample('M').mean()
+monthly_topdf
 
+
+# In[8]: 30종목 모멘텀 구하기
+topdfMomentum = monthly_topdf.iloc[-1] - monthly_topdf
+topdfMomentumScore = topdfMomentum.applymap(lambda val: 1 if val > 0 else 0 )
+sortedValues = topdfMomentumScore.mean().sort_values(ascending=False)
+choosedDf = monthly_topdf[sortedValues.head(5).index]
+choosedDf['KOSPI'] = monthly_df
+jisuDf = choosedDf / choosedDf.iloc[0]
+jisuDf.plot(figsize = (18,12))
+# for index in sortedValues.head(5).index:
+    # print(monthly_topdf[index] / monthly_topdf[index][0])
 
 # In[7]: 30종목 월 평균 값
 # topdf.to_hdf('30종목')
