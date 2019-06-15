@@ -7,9 +7,10 @@ from crawler.data.NaverDate import NaverDate
     
 class NaverStockCrawler:
     @staticmethod
-    def create(targetName):
+    def create(targetName, logging=False):
         newCrawler = NaverStockCrawler()
         newCrawler.targetName = targetName
+        newCrawler.logging = logging
         return newCrawler
 
     def __init__(self):
@@ -57,13 +58,15 @@ class NaverStockCrawler:
                 elif dateData.startDate > date:
                     isRunning = False
                     break
-            # print('pageNo:' + str(pageNo))
-            # for value in data:
-                # print(value)
+            # if self.logging:
+                # print('pageNo:' + str(pageNo))
+                # for value in data:
+                    # print(value)
             # print(data)
             if soup.find('td', class_='pgRR'):
                 pageNo += 1
             else:
+                print('break')
                 break
         return data
 

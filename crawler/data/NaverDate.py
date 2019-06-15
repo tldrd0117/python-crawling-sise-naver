@@ -1,7 +1,7 @@
 import datetime
 class NaverDate:
     @staticmethod
-    def create(startDate='', endDate=''):
+    def create(startDate='', endDate=datetime.date.today()):
         newData = NaverDate()
         newData.startDate = NaverDate.formatDate(startDate)
         newData.endDate = NaverDate.formatDate(endDate)

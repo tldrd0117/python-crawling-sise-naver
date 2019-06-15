@@ -8,15 +8,39 @@ from crawler.NaverStockCrawler import NaverStockCrawler
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
 
-
 import pandas as pd
 from functools import reduce
-import matplotlib.pyplot as plt
 import datetime as dt
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
-# In[2]:
+# In[2]: font 설정
+import matplotlib.font_manager as fm
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+
+# print(plt.rcParams['font.family'])
+# path = '/Library/Fonts/NanumBarunpenRegular.otf'
+# fontprop = fm.FontProperties(fname=path, size=18)
+path = '/Library/Fonts/NanumBarunGothicLight.otf'
+font_name = fm.FontProperties(fname=path, size=18).get_name()
+print(font_name)
+# plt.rcParams["font.family"] = font_name
+mpl.rc('font', family=font_name) # For MacOS
+
+# mpl.rcParams['axes.unicode_minus'] = False
+# plt.rcParams['font.monospace']
+# plt.rcParams["font.family"] = 'Nanum Brush Script OTF'
+# font_list = fm.findSystemFonts(fontpaths=None, fontext='ttf')
+
+# ttf 폰트 전체개수
+# print(len(font_list))
+# fm.fontManager.ttflist
+# [(f.name, f.fname) for f in fm.fontManager.ttflist if 'Nanum' in f.name]
+
+
+# In[3]:
 
 def makeDataFrame():
     crawler = NaverCrawler.create(targetName='KPI200')
@@ -152,7 +176,7 @@ def showGraphK10KOSPI200():
 
 # In[3]: 코스피 가져오기
 crawler = NaverCrawler.create(targetName='KPI200')
-date = NaverDate.create(startDate='2018-06-01', endDate='2019-05-31')
+date = NaverDate.create(startDate='2018-06-01')
 kospi200 = crawler.crawling(dateData=date)
 df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
 for v in kospi200:
@@ -167,8 +191,8 @@ monthly_df
 monthly_df['종가'][-1] - monthly_df['종가']
 # In[6]: 30종목 종가 버그 있음
 prices = dict()
-targets = topK(30)
-date = NaverDate.create(startDate='2018-06-01', endDate='2019-05-31')
+targets = topK(30) + [{'code':"114800", 'name':'KODEX 인버스'}]
+date = NaverDate.create(startDate='2018-06-01')
 for target in targets:
     print(target,'collect...')
     crawler = NaverStockCrawler.create(target['code'])
@@ -185,13 +209,30 @@ monthly_topdf
 # In[8]: 30종목 모멘텀 구하기
 topdfMomentum = monthly_topdf.iloc[-1] - monthly_topdf
 topdfMomentumScore = topdfMomentum.applymap(lambda val: 1 if val > 0 else 0 )
+print(topdfMomentumScore)
 sortedValues = topdfMomentumScore.mean().sort_values(ascending=False)
-choosedDf = monthly_topdf[sortedValues.head(5).index]
-choosedDf['KOSPI'] = monthly_df
+choosedDf = topdf[sortedValues.head(10).index]
+choosedDf['KOSPI'] = df['종가']
 jisuDf = choosedDf / choosedDf.iloc[0]
-jisuDf.plot(figsize = (18,12))
+plt = jisuDf.plot(figsize = (18,12), fontsize=12)
+fontProp = fm.FontProperties(fname=path, size=18)
+plt.legend(prop=fontProp)
+print(plt)
 # for index in sortedValues.head(5).index:
     # print(monthly_topdf[index] / monthly_topdf[index][0])
+
+
+
+
+
+# In[7]: 30종목 월 평균 값
+
+
+
+
+
+
+
 
 # In[7]: 30종목 월 평균 값
 # topdf.to_hdf('30종목')
