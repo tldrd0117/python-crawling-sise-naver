@@ -56,9 +56,9 @@ endStr = end.strftime(format='%Y-%m-%d')
 prices = dict()
 #30종목 + KODEX 인버스
 
-# crawler = NavarSearchCodeCrawler.create('KODEX')
-# targets = crawler.crawling()
-targets = topK(30) + [{'code':"114800", 'name':'KODEX 인버스'},{'code':"252670", 'name':'KODEX 200선물인버스2X'}, {'code':'251340', 'name':'KODEX 코스닥150선물인버스'}, {'code':'261220', 'name':'KODEX WTI원유선물(H)'}]
+crawler = NavarSearchCodeCrawler.create('KODEX')
+targets = crawler.crawling()
+# targets = topK(100)
 date = NaverDate.create(startDate=beforeStr, endDate=endStr)
 for target in targets:
     print(target,'collect...')
@@ -73,9 +73,9 @@ monthly_topdf
 
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
-investShareNum = 1
-momentumMonth = 3
-rebalaceRate = 0.5
+investShareNum = 10
+momentumMonth = 12
+rebalaceRate = 0.25
 print('startMoney: ', money)
 stockWallet = pd.DataFrame()
 moneyWallet = pd.DataFrame()
@@ -104,6 +104,7 @@ def buy(rate, buyDate, valuedf, money, wallet):
     return money, wallet
 
 while endDate > current:
+    print('simulate...', current)
     #money 전체 가치
     #stockMoney 주식에 투자할 가치
     #restMoney 잔금
@@ -113,7 +114,7 @@ while endDate > current:
     beforeMomentumDate = current + pd.Timedelta(-momentumMonth, unit='M')
     start = monthly_topdf.index.get_loc(beforeMomentumDate, method='nearest')
     end = monthly_topdf.index.get_loc(current, method='nearest')
-    oneYearDf = monthly_topdf.iloc[start:end]
+    oneYearDf = monthly_topdf.iloc[start:end+1]
     momentum = oneYearDf.iloc[-1] - oneYearDf
     momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
     sortedValues = momentumScore.mean().sort_values(ascending=False)
@@ -132,9 +133,6 @@ while endDate > current:
     
     #구매
     # print(money)
-    printPd('##수익률', stockValue / beforeValue)
-    printPd('##소유주식', stockWallet)
-    printPd('##주식가격', moneyWallet)
     # printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
     restMoney = stockRestMoney + restMoney
@@ -142,7 +140,10 @@ while endDate > current:
     moneySum = pd.concat([moneySum, moneydf])
     money = stockMoney + restMoney
     
-    printPd('##Total', moneySum)
+printPd('##수익률', stockValue / beforeValue)
+printPd('##소유주식', stockWallet)
+printPd('##주식가격', moneyWallet)
+printPd('##Total', moneySum)
 
 # wallet[current] = rateMoney
 # print(wallet)
