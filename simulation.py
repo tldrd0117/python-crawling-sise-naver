@@ -56,9 +56,15 @@ endStr = end.strftime(format='%Y-%m-%d')
 prices = dict()
 #30종목 + KODEX 인버스
 
-crawler = NavarSearchCodeCrawler.create('KODEX')
+crawler = NavarSearchCodeCrawler.create('TIGER')
 targets = crawler.crawling()
+# filterList = ['레버리지', '선물', '액티브', '삼성']
+# for word in filterList:
+    # targets = list(filter(lambda x : word not in x['name'], targets))
+targets
 # targets = topK(100)
+
+# In[12]: 데이터 가져오기
 date = NaverDate.create(startDate=beforeStr, endDate=endStr)
 for target in targets:
     print(target,'collect...')

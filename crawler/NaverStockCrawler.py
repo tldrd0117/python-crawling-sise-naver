@@ -23,7 +23,7 @@ class NaverStockCrawler:
         data = []
         isRunning = True
         while(isRunning):
-            text = urlopen(self.makeUrl(pageNo)).read()
+            text = urlopen(self.makeUrl(pageNo), timeout=100).read()
             soup = bs4.BeautifulSoup(text, 'lxml')
             table = soup.find(class_='type2')
             #table 자식
