@@ -56,11 +56,15 @@ endStr = end.strftime(format='%Y-%m-%d')
 prices = dict()
 #30종목 + KODEX 인버스
 
-crawler = NavarSearchCodeCrawler.create('TIGER')
+crawler = NavarSearchCodeCrawler.create('KODEX')
 targets = crawler.crawling()
-# filterList = ['레버리지', '선물', '액티브', '삼성']
-# for word in filterList:
-    # targets = list(filter(lambda x : word not in x['name'], targets))
+
+for word in ['액티브', '삼성']:
+    targets = list(filter(lambda x : word not in x['name'], targets))
+for word in ['국고채', '국채']:
+    채권 = list(filter(lambda x : word in x['name'], targets))
+for word in ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌']:
+    외국 = list(filter(lambda x : word in x['name'], targets))
 targets
 # targets = topK(100)
 
@@ -73,14 +77,16 @@ for target in targets:
     prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
 topdf = pd.DataFrame(prices)
 
+
 # In[12]: 평균
 monthly_topdf = topdf.resample('M').mean()
 monthly_topdf
 
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
-investShareNum = 10
-momentumMonth = 12
+investShareNum = 20
+momentumNum = 6
+momentumUnit = 'M'
 rebalaceRate = 0.25
 print('startMoney: ', money)
 stockWallet = pd.DataFrame()
@@ -90,6 +96,7 @@ current = startDate
 
 def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
+    printPd('투자금: ',rateMoney)
     stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
     rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
     wallet = pd.concat([wallet, rowdf])
@@ -117,7 +124,7 @@ while endDate > current:
     stockMoney = money * (1-rebalaceRate)
     restMoney = money * rebalaceRate
     
-    beforeMomentumDate = current + pd.Timedelta(-momentumMonth, unit='M')
+    beforeMomentumDate = current + pd.Timedelta(-momentumNum, unit=momentumUnit)
     start = monthly_topdf.index.get_loc(beforeMomentumDate, method='nearest')
     end = monthly_topdf.index.get_loc(current, method='nearest')
     oneYearDf = monthly_topdf.iloc[start:end+1]
@@ -125,8 +132,10 @@ while endDate > current:
     momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
     sortedValues = momentumScore.mean().sort_values(ascending=False)
     share = sortedValues.head(investShareNum)
-    rate = share / share.sum()
+    distMoney = share / (share + 1)
+    rate = distMoney / distMoney.sum()
     print('beforeBuy',money)
+    #TARGET
     stockRestMoney, stockWallet = buy(rate, current, topdf, stockMoney, stockWallet)
    
     beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][share.index]
