@@ -59,24 +59,50 @@ prices = dict()
 crawler = NavarSearchCodeCrawler.create('KODEX')
 targets = crawler.crawling()
 
+def filteredList(filterList):
+    return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, targets)]
+def filteredListReverse(filterList):
+    targetList = []
+    for target in targets:
+        isIn = False
+        for word in filterList:
+            if target['name'].find(word) > 0:
+                isIn = True
+                break
+        if not isIn:
+            targetList.append(target['name'])
+
+    return targetList
+
+
 for word in ['액티브', '삼성']:
     targets = list(filter(lambda x : word not in x['name'], targets))
-for word in ['국고채', '국채']:
-    채권 = list(filter(lambda x : word in x['name'], targets))
-for word in ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌']:
-    외국 = list(filter(lambda x : word in x['name'], targets))
-targets
+bond = filteredList([' 국고채', ' 국채'])
+foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'])
+domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'])
+print('채권:',bond)
+print('해외:',foreign)
+print('국내:',domestic)
+# targets
 # targets = topK(100)
 
-# In[12]: 데이터 가져오기
-date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-for target in targets:
-    print(target,'collect...')
-    crawler = NaverStockCrawler.create(target['code'])
-    data = crawler.crawling(date)
-    prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-topdf = pd.DataFrame(prices)
 
+
+# In[12]: 데이터 가져오기
+import os.path
+if not os.path.isfile('KODEX2017-05-31-2019-06-01.h5'):
+    print('collect start')
+    date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+    for target in targets:
+        print(target,'collect...')
+        crawler = NaverStockCrawler.create(target['code'])
+        data = crawler.crawling(date)
+        prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+    topdf = pd.DataFrame(prices)
+    topdf.to_hdf('KODEX'+beforeStr+'-'+endStr+'.h5', key='df', mode='w')
+else:
+    print('read...')
+    topdf = pd.read_hdf('KODEX2017-05-31-2019-06-01.h5', key='df')
 
 # In[12]: 평균
 monthly_topdf = topdf.resample('M').mean()
@@ -84,7 +110,15 @@ monthly_topdf
 
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
-investShareNum = 20
+
+bondNum = 3
+foreignNum = 3
+domesticNum = 3
+
+bondRateMoney = 1
+foreignRateMoney = 1
+domesticRateMoney = 1
+
 momentumNum = 6
 momentumUnit = 'M'
 rebalaceRate = 0.25
@@ -93,13 +127,16 @@ stockWallet = pd.DataFrame()
 moneyWallet = pd.DataFrame()
 moneySum = pd.DataFrame()
 current = startDate
+stockRestMoney = 0
 
 def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
     printPd('투자금: ',rateMoney)
     stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
     rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
-    wallet = pd.concat([wallet, rowdf])
+    print('wallet: ',wallet)
+    print('rowdf: ',rowdf)
+    wallet = pd.concat([wallet, rowdf], axis=1)
     for col in rateMoney.index:
         rMoney = rateMoney[col]
         sValue = stockValue[col]
@@ -116,6 +153,13 @@ def buy(rate, buyDate, valuedf, money, wallet):
             rMoney -= sValue
     return money, wallet
 
+def getInvestRate(momentumScoreMean, shareNum, cashRate):
+    sortValue = momentumScoreMean.sort_values(ascending=False)
+    share = sortValue.head(shareNum)
+    distMoney = share / (share + cashRate)
+    rate = distMoney / distMoney.sum()
+    return rate
+
 while endDate > current:
     print('simulate...', current)
     #money 전체 가치
@@ -125,26 +169,44 @@ while endDate > current:
     restMoney = money * rebalaceRate
     
     beforeMomentumDate = current + pd.Timedelta(-momentumNum, unit=momentumUnit)
+    
     start = monthly_topdf.index.get_loc(beforeMomentumDate, method='nearest')
     end = monthly_topdf.index.get_loc(current, method='nearest')
+    
     oneYearDf = monthly_topdf.iloc[start:end+1]
+
     momentum = oneYearDf.iloc[-1] - oneYearDf
     momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
-    sortedValues = momentumScore.mean().sort_values(ascending=False)
-    share = sortedValues.head(investShareNum)
-    distMoney = share / (share + 1)
-    rate = distMoney / distMoney.sum()
-    print('beforeBuy',money)
+
+    momentumScoreMean = momentumScore.mean()
+    print(bond)
+    print(momentumScoreMean[bond])
+    
+    bondRate = getInvestRate(momentumScoreMean[bond], bondNum, 1)
+    foreignRate = getInvestRate(momentumScoreMean[foreign], foreignNum, 1)
+    domesticRate = getInvestRate(momentumScoreMean[domestic], domesticNum, 1)
     #TARGET
-    stockRestMoney, stockWallet = buy(rate, current, topdf, stockMoney, stockWallet)
-   
-    beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][share.index]
+    sumRateMoney = bondRateMoney + foreignRateMoney + domesticRateMoney
+    
+    bondMoney = bondRateMoney/sumRateMoney
+    foreignMoney = foreignRateMoney/sumRateMoney
+    domesticMoney = domesticRateMoney/sumRateMoney
+
+    bondRestMoney, stockWallet = buy(bondRate, current, topdf, bondMoney, stockWallet)
+    foreignRestMoney, stockWallet = buy(foreignRate, current, topdf, foreignMoney, stockWallet)
+    domesticRestMoney, stockWallet = buy(domesticRate, current, topdf, domesticMoney, stockWallet)
+
+    stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
+
+    allIndex = bondRate.index + foreignRate + domesticRate
+    
+    beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
 
     buyMoney = pd.DataFrame([(stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=stockWallet.columns)
     moneyWallet = pd.concat([moneyWallet, buyMoney])
    
     current = current + pd.Timedelta(1, unit='M')
-    stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][share.index]
+    stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
     
     #구매
     # print(money)
