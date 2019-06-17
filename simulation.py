@@ -80,6 +80,12 @@ for word in ['액티브', '삼성']:
 bond = filteredList([' 국고채', ' 국채'])
 foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'])
 domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'])
+
+#중복제거
+bond = list(set(bond))
+foreign = list(set(foreign))
+domestic = list(set(domestic))
+
 print('채권:',bond)
 print('해외:',foreign)
 print('국내:',domestic)
@@ -103,7 +109,7 @@ if not os.path.isfile('KODEX2017-05-31-2019-06-01.h5'):
 else:
     print('read...')
     topdf = pd.read_hdf('KODEX2017-05-31-2019-06-01.h5', key='df')
-
+print(topdf)
 # In[12]: 평균
 monthly_topdf = topdf.resample('M').mean()
 monthly_topdf
@@ -131,24 +137,35 @@ stockRestMoney = 0
 
 def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
-    printPd('투자금: ',rateMoney)
+    # printPd('투자금: ',rateMoney)
     stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
     rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
-    print('wallet: ',wallet)
-    print('rowdf: ',rowdf)
-    wallet = pd.concat([wallet, rowdf], axis=1)
+    # if buyDate in wallet.index:
+    #     wallet = pd.concat([wallet, rowdf], axis=1)
+    # else:
+    #     wallet = pd.concat([wallet, rowdf], axis=0)
+    intersect = list(set(wallet.columns) & set(rowdf.columns))
+    if buyDate not in wallet.index:
+        wallet = pd.concat([wallet, rowdf], axis=0)
+    else:
+        if len(intersect) > 0:
+            wallet.loc[buyDate, intersect] = 0
+            rowdf = rowdf.drop(columns=intersect)
+            wallet = pd.concat([wallet, rowdf], axis=1)
+        else:
+            wallet = pd.concat([wallet, rowdf], axis=1)
     for col in rateMoney.index:
         rMoney = rateMoney[col]
         sValue = stockValue[col]
-        while rMoney - sValue> 0:
+        while (rMoney - sValue) > 0:
             if col in wallet.columns and buyDate in wallet.index:
-                wallet[col][buyDate] = wallet[col][buyDate]+1
-            elif col in wallet.columns :
-                dt = pd.DataFrame([{col: 1}], index=[buyDate])
-                wallet = pd.concat([wallet, dt], axis=0)
-            else:
-                dt = pd.DataFrame([{col: 1}], index=[buyDate])
-                wallet = pd.concat([wallet, dt], axis=1)
+                wallet[col][buyDate] = wallet[col][buyDate] + 1
+            # elif col in wallet.columns :
+            #     dt = pd.DataFrame([{col: 1}], index=[buyDate])
+            #     wallet = pd.concat([wallet, dt], axis=0)
+            # else:
+            #     dt = pd.DataFrame([{col: 1}], index=[buyDate])
+            #     wallet = pd.concat([wallet, dt], axis=1)
             money -= sValue
             rMoney -= sValue
     return money, wallet
@@ -179,18 +196,17 @@ while endDate > current:
     momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
 
     momentumScoreMean = momentumScore.mean()
-    print(bond)
-    print(momentumScoreMean[bond])
-    
+    # print(bond)
+    # print(momentumScoreMean[bond])
     bondRate = getInvestRate(momentumScoreMean[bond], bondNum, 1)
     foreignRate = getInvestRate(momentumScoreMean[foreign], foreignNum, 1)
     domesticRate = getInvestRate(momentumScoreMean[domestic], domesticNum, 1)
     #TARGET
     sumRateMoney = bondRateMoney + foreignRateMoney + domesticRateMoney
     
-    bondMoney = bondRateMoney/sumRateMoney
-    foreignMoney = foreignRateMoney/sumRateMoney
-    domesticMoney = domesticRateMoney/sumRateMoney
+    bondMoney = bondRateMoney/sumRateMoney * stockMoney
+    foreignMoney = foreignRateMoney/sumRateMoney * stockMoney
+    domesticMoney = domesticRateMoney/sumRateMoney * stockMoney
 
     bondRestMoney, stockWallet = buy(bondRate, current, topdf, bondMoney, stockWallet)
     foreignRestMoney, stockWallet = buy(foreignRate, current, topdf, foreignMoney, stockWallet)
@@ -198,8 +214,9 @@ while endDate > current:
 
     stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
 
-    allIndex = bondRate.index + foreignRate + domesticRate
-    
+    allIndex = list(bondRate.index) + list(foreignRate.index) + list(domesticRate.index)
+    print(allIndex)
+
     beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
 
     buyMoney = pd.DataFrame([(stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=stockWallet.columns)
@@ -213,6 +230,10 @@ while endDate > current:
     # printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
     restMoney = stockRestMoney + restMoney
+    printPd('##수익률', stockValue / beforeValue)
+    print('주식', stockMoney)
+    print('현금', restMoney)
+    print('total', restMoney + stockMoney)
     moneydf = pd.DataFrame( [[stockMoney + restMoney,stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
     money = stockMoney + restMoney
