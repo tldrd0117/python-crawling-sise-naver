@@ -43,7 +43,7 @@ def printPd(name,target):
 
 # In[9]: 1년동안 시뮬레이션 
 # In[10]: 날짜 설정
-startDate = pd.to_datetime('2018-06-01', format='%Y-%m-%d')
+startDate = pd.to_datetime('2012-06-01', format='%Y-%m-%d')
 endDate = pd.to_datetime('2019-06-01', format='%Y-%m-%d')
 
 before = startDate + pd.Timedelta(-1, unit='Y')
@@ -59,11 +59,11 @@ prices = dict()
 crawler = NavarSearchCodeCrawler.create('KODEX')
 targets = crawler.crawling()
 
-def filteredList(filterList):
-    return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, targets)]
-def filteredListReverse(filterList):
+def filteredList(filterList, items):
+    return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, items)]
+def filteredListReverse(filterList, items):
     targetList = []
-    for target in targets:
+    for target in items:
         isIn = False
         for word in filterList:
             if target['name'].find(word) > 0:
@@ -77,9 +77,9 @@ def filteredListReverse(filterList):
 
 for word in ['액티브', '삼성']:
     targets = list(filter(lambda x : word not in x['name'], targets))
-bond = filteredList([' 국고채', ' 국채'])
-foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'])
-domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'])
+bond = filteredList([' 국고채', ' 국채'], targets)
+foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'],targets)
+domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'], targets)
 
 #중복제거
 bond = list(set(bond))
@@ -96,8 +96,8 @@ print('국내:',domestic)
 
 # In[12]: 데이터 가져오기
 import os.path
-if not os.path.isfile('KODEX2017-05-31-2019-06-01.h5'):
-    print('collect start')
+if not os.path.isfile('KODEX2011-06-01-2019-06-01.h5'):
+    print('collect start',beforeStr,endStr)
     date = NaverDate.create(startDate=beforeStr, endDate=endStr)
     for target in targets:
         print(target,'collect...')
@@ -108,9 +108,10 @@ if not os.path.isfile('KODEX2017-05-31-2019-06-01.h5'):
     topdf.to_hdf('KODEX'+beforeStr+'-'+endStr+'.h5', key='df', mode='w')
 else:
     print('read...')
-    topdf = pd.read_hdf('KODEX2017-05-31-2019-06-01.h5', key='df')
+    topdf = pd.read_hdf('KODEX2011-06-01-2019-06-01.h5', key='df')
 print(topdf)
 # In[12]: 평균
+topdf = topdf.fillna(0)
 monthly_topdf = topdf.resample('M').mean()
 monthly_topdf
 
@@ -231,9 +232,11 @@ while endDate > current:
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
     restMoney = stockRestMoney + restMoney
     printPd('##수익률', stockValue / beforeValue)
+    printPd('##수익률평균', (stockValue / beforeValue).values.mean())
     print('주식', stockMoney)
     print('현금', restMoney)
     print('total', restMoney + stockMoney)
+    print('수익률', (stockMoney + restMoney)/money )
     moneydf = pd.DataFrame( [[stockMoney + restMoney,stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
     money = stockMoney + restMoney
@@ -242,6 +245,11 @@ printPd('##수익률', stockValue / beforeValue)
 printPd('##소유주식', stockWallet)
 printPd('##주식가격', moneyWallet)
 printPd('##Total', moneySum)
+
+# In[14]: 계산
+moneySum / moneySum.shift(1) 
+
+
 
 # wallet[current] = rateMoney
 # print(wallet)
