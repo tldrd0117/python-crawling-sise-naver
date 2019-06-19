@@ -19,7 +19,7 @@ class NaverWorldCrawler:
         return 'https://finance.naver.com/world/sise.nhn?symbol=%s' % (self.targetName)
     
     def crawling(self, dateData = ''):
-        driver = webdriver.PhantomJS()
+        driver = webdriver.PhantomJS('C:/Users/lsj/Downloads/phantomjs-2.1.1-windows/bin/phantomjs.exe')
         driver.get(self.makeWorldUrl())
         data = []
         pageNo = '1'
@@ -64,12 +64,13 @@ class NaverWorldCrawler:
                 elif dateData.startDate > date:
                     isRunning = False
                     break
-            print('pageNo:' + str(pageNo))
-            for value in data:
-                print(value)
+            # print('pageNo:' + str(pageNo))
+            # for value in data:
+                # print(value)
             # print(data)
             eleNext = driver.find_elements_by_css_selector('#dayPaging .next')
             nextPageNo = str(int(pageNo) + 1)
+            print(nextPageNo)
             if len(eleNext) > 0 and int(pageNo) % 10 == 0:
                 eleNext[0].click()
                 wait = WebDriverWait(driver,10)
