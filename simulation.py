@@ -43,8 +43,8 @@ def printPd(name,target):
 
 # In[9]: 1년동안 시뮬레이션 
 # In[10]: 날짜 설정
-startDate = pd.to_datetime('2012-06-01', format='%Y-%m-%d')
-endDate = pd.to_datetime('2019-06-01', format='%Y-%m-%d')
+startDate = pd.to_datetime('2007-06-01', format='%Y-%m-%d')
+endDate = pd.to_datetime('2010-06-01', format='%Y-%m-%d')
 
 before = startDate + pd.Timedelta(-1, unit='Y')
 end = endDate
@@ -56,60 +56,74 @@ endStr = end.strftime(format='%Y-%m-%d')
 prices = dict()
 #30종목 + KODEX 인버스
 
-crawler = NavarSearchCodeCrawler.create('KODEX')
-targets = crawler.crawling()
+# crawler = NavarSearchCodeCrawler.create('KODEX')
+# targets = crawler.crawling()
 
-def filteredList(filterList, items):
-    return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, items)]
-def filteredListReverse(filterList, items):
-    targetList = []
-    for target in items:
-        isIn = False
-        for word in filterList:
-            if target['name'].find(word) > 0:
-                isIn = True
-                break
-        if not isIn:
-            targetList.append(target['name'])
+# def filteredList(filterList, items):
+#     return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, items)]
+# def filteredListReverse(filterList, items):
+#     targetList = []
+#     for target in items:
+#         isIn = False
+#         for word in filterList:
+#             if target['name'].find(word) > 0:
+#                 isIn = True
+#                 break
+#         if not isIn:
+#             targetList.append(target['name'])
 
-    return targetList
+#     return targetList
 
 
-for word in ['액티브', '삼성']:
-    targets = list(filter(lambda x : word not in x['name'], targets))
-bond = filteredList([' 국고채', ' 국채'], targets)
-foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'],targets)
-domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'], targets)
+# for word in ['액티브', '삼성']:
+#     targets = list(filter(lambda x : word not in x['name'], targets))
+# bond = filteredList([' 국고채', ' 국채'], targets)
+# foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'],targets)
+# domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'], targets)
 
-#중복제거
-bond = list(set(bond))
-foreign = list(set(foreign))
-domestic = list(set(domestic))
+# #중복제거
+# bond = list(set(bond))
+# foreign = list(set(foreign))
+# domestic = list(set(domestic))
 
-print('채권:',bond)
-print('해외:',foreign)
-print('국내:',domestic)
+# print('채권:',bond)
+# print('해외:',foreign)
+# print('국내:',domestic)
 # targets
 # targets = topK(100)
 
 
 
 # In[12]: 데이터 가져오기
-import os.path
-if not os.path.isfile('KODEX2011-06-01-2019-06-01.h5'):
-    print('collect start',beforeStr,endStr)
-    date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-    for target in targets:
-        print(target,'collect...')
-        crawler = NaverStockCrawler.create(target['code'])
-        data = crawler.crawling(date)
-        prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-    topdf = pd.DataFrame(prices)
-    topdf.to_hdf('KODEX'+beforeStr+'-'+endStr+'.h5', key='df', mode='w')
-else:
-    print('read...')
-    topdf = pd.read_hdf('KODEX2011-06-01-2019-06-01.h5', key='df')
+# import os.path
+# if not os.path.isfile('KODEX2011-06-01-2019-06-01.h5'):
+#     print('collect start',beforeStr,endStr)
+#     date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+#     for target in targets:
+#         print(target,'collect...')
+#         crawler = NaverStockCrawler.create(target['code'])
+#         data = crawler.crawling(date)
+#         prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+#     topdf = pd.DataFrame(prices)
+#     topdf.to_hdf('KODEX'+beforeStr+'-'+endStr+'.h5', key='df', mode='w')
+# else:
+#     print('read...')
+#     topdf = pd.read_hdf('KODEX2011-06-01-2019-06-01.h5', key='df')
+# print(topdf)
+
+# In[12]: S&P500 데이터
+date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+crawler = NaverWorldCrawler.create('SPI@SPX')
+data = crawler.crawling(date)
+prices['S&P500'] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data } 
+topdf = pd.DataFrame(prices)
+bond = ['S&P500']
+foreign = []
+domestic = []
+
 print(topdf)
+
+
 # In[12]: 평균
 topdf = topdf.fillna(0)
 monthly_topdf = topdf.resample('M').mean()
@@ -118,13 +132,13 @@ monthly_topdf
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
 
-bondNum = 3
-foreignNum = 3
-domesticNum = 3
+bondNum = 1 #3
+foreignNum = 0 #3
+domesticNum = 0 #3
 
-bondRateMoney = 1
-foreignRateMoney = 1
-domesticRateMoney = 1
+bondRateMoney = 1 
+foreignRateMoney = 0
+domesticRateMoney = 0
 
 momentumNum = 6
 momentumUnit = 'M'
@@ -138,7 +152,6 @@ stockRestMoney = 0
 
 def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
-    # printPd('투자금: ',rateMoney)
     stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
     rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
     # if buyDate in wallet.index:
@@ -174,9 +187,13 @@ def buy(rate, buyDate, valuedf, money, wallet):
 def getInvestRate(momentumScoreMean, shareNum, cashRate):
     sortValue = momentumScoreMean.sort_values(ascending=False)
     share = sortValue.head(shareNum)
+    if share.size == 0:
+        return pd.Series({'S&P500': 0.0})
     distMoney = share / (share + cashRate)
-    rate = distMoney / distMoney.sum()
-    return rate
+    sumMoney = distMoney.sum()
+    if sumMoney != 0.0:
+        return distMoney / sumMoney
+    return pd.Series({'S&P500': 0.0})
 
 while endDate > current:
     print('simulate...', current)
@@ -202,24 +219,27 @@ while endDate > current:
     bondRate = getInvestRate(momentumScoreMean[bond], bondNum, 1)
     foreignRate = getInvestRate(momentumScoreMean[foreign], foreignNum, 1)
     domesticRate = getInvestRate(momentumScoreMean[domestic], domesticNum, 1)
+    print('bondRate', bondRate)
     #TARGET
     sumRateMoney = bondRateMoney + foreignRateMoney + domesticRateMoney
-    
     bondMoney = bondRateMoney/sumRateMoney * stockMoney
     foreignMoney = foreignRateMoney/sumRateMoney * stockMoney
     domesticMoney = domesticRateMoney/sumRateMoney * stockMoney
 
+    print('bondMoney:', bondMoney)
     bondRestMoney, stockWallet = buy(bondRate, current, topdf, bondMoney, stockWallet)
+    # printPd('채권잔금:', stockWallet)
     foreignRestMoney, stockWallet = buy(foreignRate, current, topdf, foreignMoney, stockWallet)
+    # printPd('해외잔금:', stockWallet)
     domesticRestMoney, stockWallet = buy(domesticRate, current, topdf, domesticMoney, stockWallet)
-
+    # printPd('국내잔금:', stockWallet)
     stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
 
-    allIndex = list(bondRate.index) + list(foreignRate.index) + list(domesticRate.index)
-    print(allIndex)
+    allIndex = list(bondRate.index)# + list(foreignRate.index) + list(domesticRate.index)
+    # print(allIndex)
 
     beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-
+    print(stockWallet)
     buyMoney = pd.DataFrame([(stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=stockWallet.columns)
     moneyWallet = pd.concat([moneyWallet, buyMoney])
    
@@ -228,8 +248,9 @@ while endDate > current:
     
     #구매
     # print(money)
-    # printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
+    printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
+    print('잔금',restMoney, stockRestMoney, stockMoney)
     restMoney = stockRestMoney + restMoney
     printPd('##수익률', stockValue / beforeValue)
     printPd('##수익률평균', (stockValue / beforeValue).values.mean())
@@ -237,7 +258,7 @@ while endDate > current:
     print('현금', restMoney)
     print('total', restMoney + stockMoney)
     print('수익률', (stockMoney + restMoney)/money )
-    moneydf = pd.DataFrame( [[stockMoney + restMoney,stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
+    moneydf = pd.DataFrame( [[stockMoney + restMoney, stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
     money = stockMoney + restMoney
     
@@ -247,7 +268,11 @@ printPd('##주식가격', moneyWallet)
 printPd('##Total', moneySum)
 
 # In[14]: 계산
-moneySum / moneySum.shift(1) 
+# stockWallet
+# moneyWallet
+moneySum
+# stockValue / beforeValue
+# moneySum / moneySum.shift(1) 
 
 
 
