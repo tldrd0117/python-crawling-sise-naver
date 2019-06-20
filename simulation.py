@@ -43,8 +43,10 @@ def printPd(name,target):
 
 # In[9]: 1년동안 시뮬레이션 
 # In[10]: 날짜 설정
-startDate = pd.to_datetime('2017-06-01', format='%Y-%m-%d')
-endDate = pd.to_datetime('2019-06-01', format='%Y-%m-%d')
+startDateStr = '2012-06-01'
+endDateStr = '2019-06-01'
+startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
+endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
 
 before = startDate + pd.Timedelta(-1, unit='Y')
 end = endDate
@@ -152,7 +154,7 @@ monthly_topdf
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
 
-bondNum = 3 
+bondNum = 0 
 foreignNum = 3 
 domesticNum = 3 
 
@@ -169,6 +171,15 @@ moneyWallet = pd.DataFrame()
 moneySum = pd.DataFrame()
 current = startDate
 stockRestMoney = 0
+restBond = 'KODEX 국채선물10년'
+
+def restBondBuy(buyDate, valuedf, money):
+    bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][restBond]
+    stockNum = 0
+    while bondValue < money:
+        money -= bondValue
+        stockNum += 1
+    return stockNum, money
 
 def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
@@ -255,6 +266,8 @@ while endDate > current:
     # printPd('국내잔금:', stockWallet)
     stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
 
+    bondNum, restMoney = restBondBuy(current, topdf, stockRestMoney + restMoney)
+
     allIndex = list(bondRate.index) + list(foreignRate.index) + list(domesticRate.index)
     allIndex = list(set(allIndex))
     # print(allIndex)
@@ -266,13 +279,14 @@ while endDate > current:
    
     current = current + pd.Timedelta(1, unit='M')
     stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-    
+    restMoney = restMoney + bondNum * topdf.iloc[topdf.index.get_loc(current, method='nearest')][restBond]
+
     #구매
     # print(money)
     printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
-    print('잔금',restMoney, stockRestMoney, stockMoney)
-    restMoney = stockRestMoney + restMoney
+    print('잔금',restMoney)
+    # restMoney = stockRestMoney + restMoney
     printPd('##수익률', stockValue / beforeValue)
     printPd('##수익률평균', (stockValue / beforeValue).values.mean())
     print('주식', stockMoney)
@@ -288,10 +302,44 @@ printPd('##소유주식', stockWallet)
 printPd('##주식가격', moneyWallet)
 printPd('##Total', moneySum)
 
+# In[14]: 코스피 200 가져오기
+crawler = NaverCrawler.create(targetName='KPI200')
+date = NaverDate.create(startDate=startDateStr, endDate=endDateStr)
+kospi200 = crawler.crawling(dateData=date)
+df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
+for v in kospi200:
+    df.loc[v.index()] = v.value()
+df
+
+# In[15]: 날짜 normalize
+moneySum.index = moneySum.index.map(lambda dt: pd.to_datetime(dt.date()))
+# moneySum
+# df.loc[moneySum.index, :]
+# df.index
+
+# In[16]: 연평균 수익률
+portfolio = moneySum['total'] / moneySum['total'].iloc[0]
+투자기간 = len(moneySum.index)/12
+print(portfolio)
+(portfolio[-1]**(1/투자기간)*100-100)
+
+# In[15]: 그래프 그리기
+choosedDf = moneySum[['total']]
+choosedDf['KOSPI'] = df['종가']
+choosedDf[restBond] = topdf[restBond]
+choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
+# print(choosedDf)
+jisuDf = choosedDf / choosedDf.iloc[0]
+print(jisuDf)
+plt = jisuDf.plot(figsize = (18,12), fontsize=12)
+fontProp = fm.FontProperties(fname=path, size=18)
+plt.legend(prop=fontProp)
+print(plt)
+
 # In[14]: 계산
 # stockWallet
 # moneyWallet
-moneySum
+# moneySum
 # stockValue / beforeValue
 # moneySum / moneySum.shift(1) 
 
