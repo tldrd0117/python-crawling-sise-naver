@@ -45,6 +45,9 @@ class NaverStockCrawler:
                 # print(dateData.startDate)
                 # print(date)
                 # print(dateData.endDate)
+                if one[0] == '0':
+                    isRunning = False
+                    break
                 if dateData.startDate <= date and date <= dateData.endDate :
                     resultData = NaverStockResultData.create(
                         date=one[0], 

@@ -53,64 +53,82 @@ beforeStr = before.strftime(format='%Y-%m-%d')
 endStr = end.strftime(format='%Y-%m-%d')
 
 # In[11]: 데이터수집
-prices = dict()
 #30종목 + KODEX 인버스
 
-crawler = NavarSearchCodeCrawler.create('KODEX')
-targets = crawler.crawling()
+# crawler = NavarSearchCodeCrawler.create('KODEX')
+# targets = crawler.crawling()
 
-def filteredList(filterList, items):
-    return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, items)]
-def filteredListReverse(filterList, items):
-    targetList = []
-    for target in items:
-        isIn = False
-        for word in filterList:
-            if target['name'].find(word) > 0:
-                isIn = True
-                break
-        if not isIn:
-            targetList.append(target['name'])
+# def filteredList(filterList, items):
+#     return [ t['name'] for word in filterList for t in filter(lambda x : x['name'].find(word) >= 0, items)]
+# def filteredListReverse(filterList, items):
+#     targetList = []
+#     for target in items:
+#         isIn = False
+#         for word in filterList:
+#             if target['name'].find(word) > 0:
+#                 isIn = True
+#                 break
+#         if not isIn:
+#             targetList.append(target['name'])
 
-    return targetList
+#     return targetList
 
 
-for word in ['액티브', '삼성']:
-    targets = list(filter(lambda x : word not in x['name'], targets))
-bond = filteredList([' 국고채', ' 국채'], targets)
-foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌'],targets)
-domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'], targets)
+# for word in ['액티브', '삼성']:
+#     targets = list(filter(lambda x : word not in x['name'], targets))
+# bond = filteredList([' 국고채', ' 국채'], targets)
+# foreign = filteredList(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '차이나', '라틴', '유로'],targets)
+# domestic = filteredListReverse(['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '국고채', '국채'], targets)
 
-#중복제거
-bond = list(set(bond))
-foreign = list(set(foreign))
-domestic = list(set(domestic))
+# #중복제거
+# bond = list(set(bond))
+# foreign = list(set(foreign))
+# domestic = list(set(domestic))
 
-print('채권:',bond)
-print('해외:',foreign)
-print('국내:',domestic)
-# targets
-# targets = topK(100)
+# print('채권:',bond)
+# print('해외:',foreign)
+# print('국내:',domestic)
+# # targets
+# # targets = topK(100)
+# In[11]: define price
+prices = dict()
 
+# In[12]: read
+
+topcap = pd.read_hdf('topcap2007-06-20-2018-06-20.h5')
+# In[12]: range
+# topcap.loc['2016-06-20',['Code','Name']]['Code']
+# shares = topcap.loc['2016'+'-06-20',['Code','Name']]
+# for index, row  in shares.iterrows():
+    # print(row['Code'])
+for year in range(2007, 2019):
+    shares = topcap.loc[str(year)+'-06-20',['Code','Name']]
+    date = NaverDate.create(startDate=str(year)+'-01-01', endDate=str(year)+'-12-31')
+    for index, row  in shares.iterrows():
+        crawler = NaverStockCrawler.create(str(row['Code']))
+        data = crawler.crawling(date)
+        prices[row['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+topdf = pd.DataFrame(prices)
+topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
 
 
 # In[12]: 데이터 가져오기
-import os.path
-name = 'KODEX'+beforeStr+'-'+endStr+'.h5'
-if not os.path.isfile(name):
-    print('collect start',beforeStr,endStr)
-    date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-    for target in targets:
-        print(target,'collect...')
-        crawler = NaverStockCrawler.create(target['code'])
-        data = crawler.crawling(date)
-        prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-    topdf = pd.DataFrame(prices)
-    topdf.to_hdf(name, key='df', mode='w')
-else:
-    print('read...')
-    topdf = pd.read_hdf(name, key='df')
-print(topdf)
+# import os.path
+# name = 'KODEX'+beforeStr+'-'+endStr+'.h5'
+# if not os.path.isfile(name):
+#     print('collect start',beforeStr,endStr)
+#     date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+#     for target in targets:
+#         print(target,'collect...')
+#         crawler = NaverStockCrawler.create(target['code'])
+#         data = crawler.crawling(date)
+#         prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+#     topdf = pd.DataFrame(prices)
+#     topdf.to_hdf(name, key='df', mode='w')
+# else:
+#     print('read...')
+#     topdf = pd.read_hdf(name, key='df')
+# print(topdf)
 
 # In[12]: S&P500 데이터
 # date = NaverDate.create(startDate=beforeStr, endDate=endStr)
