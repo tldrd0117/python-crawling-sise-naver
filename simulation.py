@@ -1,4 +1,4 @@
-# In[1]:
+# In[1]: Import
 from crawler.NaverCrawler import NaverCrawler
 from crawler.NaverWorldCrawler import NaverWorldCrawler
 from crawler.NaverTopMarketCapCrawler import NaverTopMarketCapCrawler
@@ -43,8 +43,8 @@ def printPd(name,target):
 
 # In[9]: 1년동안 시뮬레이션 
 # In[10]: 날짜 설정
-startDateStr = '2012-06-01'
-endDateStr = '2019-06-01'
+startDateStr = '2008-01-01'
+endDateStr = '2018-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
 
@@ -98,18 +98,34 @@ prices = dict()
 # In[12]: read
 
 topcap = pd.read_hdf('topcap2007-06-20-2018-06-20.h5')
+# In[12]
+targets = []
+# topcap['Code']
+# v1 = list(set(topcap['Code'].values))
+# v2 = list(set(topcap['Name'].values))
+# print(len(v1), len(v2))
+for index, row  in topcap.iterrows():
+    targets.append({'Code':row['Code'], 'Name':row['Name']})
+# print(targets[0]['Code'])
+# def prrr(t):
+#     print(t['Code'])
+#     print(t['Code'] in list(topcap['Code'])
+#     return t['Code'] in list(topcap['Code'])
+#     # lambda t: t['Code'] in list(topcap['Code'])
+# ta = filter(prrr,targets)
+# print(len(targets))
+# print(len(list(ta)))
 # In[12]: range
 # topcap.loc['2016-06-20',['Code','Name']]['Code']
 # shares = topcap.loc['2016'+'-06-20',['Code','Name']]
 # for index, row  in shares.iterrows():
     # print(row['Code'])
-for year in range(2007, 2019):
-    shares = topcap.loc[str(year)+'-06-20',['Code','Name']]
-    date = NaverDate.create(startDate=str(year)+'-01-01', endDate=str(year)+'-12-31')
-    for index, row  in shares.iterrows():
-        crawler = NaverStockCrawler.create(str(row['Code']))
-        data = crawler.crawling(date)
-        prices[row['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+for code in list(topcap['Code']):
+    print(code,'collect...')
+    crawler = NaverStockCrawler.create(code)
+    data = crawler.crawling(date)
+    prices[data['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
 topdf = pd.DataFrame(prices)
 topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
 

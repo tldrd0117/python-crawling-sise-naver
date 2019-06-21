@@ -23,7 +23,7 @@ class NaverStockCrawler:
         data = []
         isRunning = True
         while(isRunning):
-            text = urlopen(self.makeUrl(pageNo), timeout=100).read()
+            text = urlopen(self.makeUrl(pageNo), timeout=500).read()
             soup = bs4.BeautifulSoup(text, 'lxml')
             table = soup.find(class_='type2')
             #table 자식
@@ -41,13 +41,17 @@ class NaverStockCrawler:
             #7개씩 자름
             splitData = [strings[i:i + 7] for i in range(0, len(strings), 7)]
             for one in splitData:
+                if not len(one) == 7 :
+                    isRunning = False
+                    break
+                if len(one[0]) < 8:
+                    isRunning = False
+                    break
                 date = NaverDate.formatDate(date=one[0])
                 # print(dateData.startDate)
                 # print(date)
                 # print(dateData.endDate)
-                if one[0] == '0':
-                    isRunning = False
-                    break
+                
                 if dateData.startDate <= date and date <= dateData.endDate :
                     resultData = NaverStockResultData.create(
                         date=one[0], 
