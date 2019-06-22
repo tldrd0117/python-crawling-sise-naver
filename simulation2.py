@@ -101,6 +101,8 @@ while endDate > current:
     foreign.calculateInvestMoney(sumMoneyRate, stockMoney)
     domestic.calculateInvestMoney(sumMoneyRate, stockMoney)
 
+    ###여기까지 했음
+
     stockRestMoney += (bondRateRestMoney + foreignRateRestMoney + domesticRateRestMoney)
 
     bondRestMoney, stockWallet = buy(bondRate, current, topdf, bondMoney, stockWallet)
