@@ -101,7 +101,7 @@ prices = dict()
 
 # In[12]: read
 
-topcap = pd.read_hdf('topcap2007-06-20-2018-06-20.h5')
+topcap = pd.read_hdf('ZIPTOPCAP2007-01-01-2019-12-31.h5')
 # In[12]
 targets = {}
 for index, row  in topcap.iterrows():
@@ -109,7 +109,7 @@ for index, row  in topcap.iterrows():
 # In[12]: 종목별 종가
 import os.path
 
-name = 'TOPCAPSTOCK2007-06-20-2018-06-20.h5'
+name = 'STOCKZIPTOPCAP2007-01-01-2019-12-31.h5'
 
 if not os.path.isfile(name):
     date = NaverDate.create(startDate=beforeStr, endDate=endStr)
@@ -123,7 +123,7 @@ if not os.path.isfile(name):
         progress+=1
 
     topdf = pd.DataFrame(prices)
-    topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
+    topdf.to_hdf('STOCKZIPTOPCAP2007-01-01-2019-12-31.h5', key='df', mode='w')
 else:
     topdf = pd.read_hdf(name, key='df')
 topdf
@@ -203,10 +203,6 @@ def buy(rate, buyDate, valuedf, money, wallet):
     rateMoney = rate * money
     stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
     rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
-    # if buyDate in wallet.index:
-    #     wallet = pd.concat([wallet, rowdf], axis=1)
-    # else:
-    #     wallet = pd.concat([wallet, rowdf], axis=0)
     intersect = list(set(wallet.columns) & set(rowdf.columns))
     if buyDate not in wallet.index:
         wallet = pd.concat([wallet, rowdf], axis=0)
@@ -223,12 +219,6 @@ def buy(rate, buyDate, valuedf, money, wallet):
         while (rMoney - sValue) > 0:
             if col in wallet.columns and buyDate in wallet.index:
                 wallet[col][buyDate] = wallet[col][buyDate] + 1
-            # elif col in wallet.columns :
-            #     dt = pd.DataFrame([{col: 1}], index=[buyDate])
-            #     wallet = pd.concat([wallet, dt], axis=0)
-            # else:
-            #     dt = pd.DataFrame([{col: 1}], index=[buyDate])
-            #     wallet = pd.concat([wallet, dt], axis=1)
             money -= sValue
             rMoney -= sValue
     return money, wallet
@@ -269,10 +259,13 @@ while endDate > current:
     domesticRate, domesticMoneyRate = getInvestRate(momentumScoreMean[domestic], domesticNum, 1)
     #TARGET
     sumRateMoney = bondRateMoney + foreignRateMoney + domesticRateMoney
+    
     bondMoney = bondRateMoney/sumRateMoney * stockMoney * bondMoneyRate
     bondRateRestMoney = bondRateMoney/sumRateMoney * stockMoney * (1 - bondMoneyRate)
+
     foreignMoney = foreignRateMoney/sumRateMoney * stockMoney * foreignMoneyRate
     foreignRateRestMoney = foreignRateMoney/sumRateMoney * stockMoney * (1 - foreignMoneyRate)
+    
     domesticMoney = domesticRateMoney/sumRateMoney * stockMoney * domesticMoneyRate
     domesticRateRestMoney = domesticRateMoney/sumRateMoney * stockMoney * (1 - domesticMoneyRate)
 
