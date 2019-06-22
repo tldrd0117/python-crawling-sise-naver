@@ -15,11 +15,15 @@ import datetime as dt
 import numpy as np
 from sklearn.linear_model import LinearRegression
 from IPython.display import display
+import time
+import random
 
 # In[2]: font 설정
 import matplotlib.font_manager as fm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
+startTime = time.time()  # 시작 시간 저장
 
 path = '/Library/Fonts/NanumBarunGothicLight.otf'
 font_name = fm.FontProperties(fname=path, size=18).get_name()
@@ -99,54 +103,48 @@ prices = dict()
 
 topcap = pd.read_hdf('topcap2007-06-20-2018-06-20.h5')
 # In[12]
-targets = []
-# topcap['Code']
-# v1 = list(set(topcap['Code'].values))
-# v2 = list(set(topcap['Name'].values))
-# print(len(v1), len(v2))
+targets = {}
 for index, row  in topcap.iterrows():
-    targets.append({'Code':row['Code'], 'Name':row['Name']})
-# print(targets[0]['Code'])
-# def prrr(t):
-#     print(t['Code'])
-#     print(t['Code'] in list(topcap['Code'])
-#     return t['Code'] in list(topcap['Code'])
-#     # lambda t: t['Code'] in list(topcap['Code'])
-# ta = filter(prrr,targets)
-# print(len(targets))
-# print(len(list(ta)))
-# In[12]: range
-# topcap.loc['2016-06-20',['Code','Name']]['Code']
-# shares = topcap.loc['2016'+'-06-20',['Code','Name']]
-# for index, row  in shares.iterrows():
-    # print(row['Code'])
-date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-for code in list(topcap['Code']):
-    print(code,'collect...')
-    crawler = NaverStockCrawler.create(code)
-    data = crawler.crawling(date)
-    prices[data['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-topdf = pd.DataFrame(prices)
-topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
+    targets[row['Code']] = row['Name']
+# In[12]: 종목별 종가
+import os.path
 
+name = 'TOPCAPSTOCK2007-06-20-2018-06-20.h5'
 
-# In[12]: 데이터 가져오기
-# import os.path
-# name = 'KODEX'+beforeStr+'-'+endStr+'.h5'
-# if not os.path.isfile(name):
-#     print('collect start',beforeStr,endStr)
-#     date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-#     for target in targets:
-#         print(target,'collect...')
-#         crawler = NaverStockCrawler.create(target['code'])
-#         data = crawler.crawling(date)
-#         prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-#     topdf = pd.DataFrame(prices)
-#     topdf.to_hdf(name, key='df', mode='w')
-# else:
-#     print('read...')
-#     topdf = pd.read_hdf(name, key='df')
-# print(topdf)
+if not os.path.isfile(name):
+    date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+    progress = 0
+    compliteLen = len(targets.keys())
+    for key in targets:
+        print(targets[key],'collect...', str(progress),'/',str(compliteLen) ,str(progress/compliteLen)+'%')
+        crawler = NaverStockCrawler.create(key)
+        data = crawler.crawling(date)
+        prices[targets[key]] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+        progress+=1
+
+    topdf = pd.DataFrame(prices)
+    topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
+else:
+    topdf = pd.read_hdf(name, key='df')
+topdf
+
+# In[12]: 채권 데이터 가져오기
+name = 'BOND'+beforeStr+'-'+endStr+'.h5'
+bondTargets = [{'code':'114260','name':'KODEX 국고채3년'}]
+bondPrices = dict()
+
+if not os.path.isfile(name):
+    for target in bondTargets:
+        print(target['name'], 'collect...')
+        crawler = NaverStockCrawler.create(target['code'])
+        data = crawler.crawling(date)
+        bondPrices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+    bonddf = pd.DataFrame(bondPrices)
+    bonddf.to_hdf(name, key='df', mode='w')
+else:
+    print('read...')
+    bonddf = pd.read_hdf(name, key='df')
+bonddf
 
 # In[12]: S&P500 데이터
 # date = NaverDate.create(startDate=beforeStr, endDate=endStr)
@@ -157,10 +155,9 @@ topdf.to_hdf('TOPCAPSTOCK2007-06-20-2018-06-20.h5', key='df', mode='w')
 # bond = ['S&P500']
 # foreign = []
 # domestic = []
+# topcap['2018']
 
-# In[12]: print
-# topdf.index.get_loc(pd.to_datetime('2014-04-21', format='%Y-%m-%d'), method='nearest')
-topdf
+# list(topcap[str(2009)]['Code'])
 
 # In[12]: 평균
 topdf = topdf.fillna(0)
@@ -170,12 +167,18 @@ monthly_topdf
 # In[13]: 시작날 부터 모멘텀 구하기
 money = 10000000
 
-bondNum = 0 
-foreignNum = 3 
-domesticNum = 3 
+foreign = []
+bond = []
+domestic = list(topdf.columns)
 
-bondRateMoney = 1 
-foreignRateMoney = 1
+restBond = list(bonddf.columns)[0]
+
+bondNum = 0 
+foreignNum = 0
+domesticNum = 10
+
+bondRateMoney = 0
+foreignRateMoney = 0
 domesticRateMoney = 1
 
 momentumNum = 12
@@ -187,7 +190,6 @@ moneyWallet = pd.DataFrame()
 moneySum = pd.DataFrame()
 current = startDate
 stockRestMoney = 0
-restBond = 'KODEX 국채선물10년'
 
 def restBondBuy(buyDate, valuedf, money):
     bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][restBond]
@@ -240,6 +242,8 @@ def getInvestRate(momentumScoreMean, shareNum, cashRate):
 
 while endDate > current:
     print('simulate...', current)
+    domestic = list(topcap[str(current.year)]['Name'])
+    # print(len(domestic), domestic )
     #money 전체 가치
     #stockMoney 주식에 투자할 가치
     #restMoney 잔금
@@ -282,7 +286,7 @@ while endDate > current:
     # printPd('국내잔금:', stockWallet)
     stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
 
-    bondNum, restMoney = restBondBuy(current, topdf, stockRestMoney + restMoney)
+    bondNum, restMoney = restBondBuy(current, bonddf, stockRestMoney + restMoney)
 
     allIndex = list(bondRate.index) + list(foreignRate.index) + list(domesticRate.index)
     allIndex = list(set(allIndex))
@@ -295,20 +299,20 @@ while endDate > current:
    
     current = current + pd.Timedelta(1, unit='M')
     stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-    restMoney = restMoney + bondNum * topdf.iloc[topdf.index.get_loc(current, method='nearest')][restBond]
+    restMoney = restMoney + bondNum * bonddf.iloc[bonddf.index.get_loc(current, method='nearest')][restBond]
 
     #구매
     # print(money)
-    printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
+    # printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
     stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
-    print('잔금',restMoney)
+    # print('잔금',restMoney)
     # restMoney = stockRestMoney + restMoney
-    printPd('##수익률', stockValue / beforeValue)
-    printPd('##수익률평균', (stockValue / beforeValue).values.mean())
-    print('주식', stockMoney)
-    print('현금', restMoney)
-    print('total', restMoney + stockMoney)
-    print('수익률', (stockMoney + restMoney)/money )
+    # printPd('##수익률', stockValue / beforeValue)
+    # printPd('##수익률평균', (stockValue / beforeValue).values.mean())
+    # print('주식', stockMoney)
+    # print('현금', restMoney)
+    # print('total', restMoney + stockMoney)
+    # print('수익률', (stockMoney + restMoney)/money )
     moneydf = pd.DataFrame( [[stockMoney + restMoney, stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
     money = stockMoney + restMoney
@@ -336,13 +340,16 @@ moneySum.index = moneySum.index.map(lambda dt: pd.to_datetime(dt.date()))
 # In[16]: 연평균 수익률
 portfolio = moneySum['total'] / moneySum['total'].iloc[0]
 투자기간 = len(moneySum.index)/12
-print(portfolio)
-(portfolio[-1]**(1/투자기간)*100-100)
+# print(portfolio)
+print('연평균 수익률',(portfolio[-1]**(1/투자기간)*100-100))
+
+print('최대 하락률',((portfolio.shift(1) - portfolio)*100).min())
+print('최대 상승률',((portfolio.shift(1) - portfolio)*100).max())
 
 # In[15]: 그래프 그리기
 choosedDf = moneySum[['total']]
 choosedDf['KOSPI'] = df['종가']
-choosedDf[restBond] = topdf[restBond]
+choosedDf[restBond] = bonddf[restBond]
 choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
 # print(choosedDf)
 jisuDf = choosedDf / choosedDf.iloc[0]
@@ -351,6 +358,9 @@ plt = jisuDf.plot(figsize = (18,12), fontsize=12)
 fontProp = fm.FontProperties(fname=path, size=18)
 plt.legend(prop=fontProp)
 print(plt)
+
+# In[16]: 걸린시간
+print("실행 시간 :", time.time() - startTime)  # 현재시각 - 시작시간 = 실행 시간
 
 # In[14]: 계산
 # stockWallet

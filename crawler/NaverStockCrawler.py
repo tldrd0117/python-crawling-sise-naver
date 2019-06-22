@@ -1,9 +1,13 @@
-from urllib.request import urlopen
+# from urllib.request import urlopen
+import urllib3
 import bs4
 from functools import reduce
 import itertools
 from crawler.data.NaverStockResultData import NaverStockResultData
 from crawler.data.NaverDate import NaverDate
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) 
+http = urllib3.PoolManager()
     
 class NaverStockCrawler:
     @staticmethod
@@ -23,7 +27,8 @@ class NaverStockCrawler:
         data = []
         isRunning = True
         while(isRunning):
-            text = urlopen(self.makeUrl(pageNo), timeout=500).read()
+            r = http.request('GET', self.makeUrl(pageNo), timeout=10, retries=10)
+            text = r.data
             soup = bs4.BeautifulSoup(text, 'lxml')
             table = soup.find(class_='type2')
             #table 자식

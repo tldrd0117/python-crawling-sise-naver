@@ -26,15 +26,15 @@ print(font_name)
 mpl.rc('font', family=font_name) 
 
 # In[3]: test 
-# prices = dict()
-# date = NaverDate.create(startDate='1997-06-01')
-# crawler = NaverStockCrawler.create('035720', logging=True)
-# data = crawler.crawling(date)
-# prices['카카오'] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
-# topdf = pd.DataFrame(prices)
-# topdf
-crawler = NavarSearchCodeCrawler.create('KODEX')
-data = crawler.crawling()
-data
+prices = dict()
+date = NaverDate.create(startDate='1997-06-01')
+crawler = NaverStockCrawler.create('035720', logging=True)
+data = crawler.crawling(date)
+prices['카카오'] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+topdf = pd.DataFrame(prices)
+topdf
+# crawler = NavarSearchCodeCrawler.create('KODEX')
+# data = crawler.crawling()
+# data
 
 #%%
