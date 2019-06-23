@@ -9,9 +9,6 @@ from crawler.NavarSearchCodeCrawler import NavarSearchCodeCrawler
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
 
-from backtest.StockLoader import StockLoader
-from backtest.StockTransaction import StockTransaction
-
 import pandas as pd
 from functools import reduce
 import datetime as dt
@@ -20,6 +17,7 @@ from sklearn.linear_model import LinearRegression
 from IPython.display import display
 import time
 import random
+import os.path
 
 # In[2]: font 설정
 import matplotlib.font_manager as fm
@@ -44,8 +42,66 @@ beforeStr = before.strftime(format='%Y-%m-%d')
 endStr = end.strftime(format='%Y-%m-%d')
 
 # In[3]: 주식 불러오기
+class StockLoader:
+    @staticmethod
+    def create():
+        stockloader = StockLoader()
+        return stockloader
+
+    def topk(self, num):
+        crawler = NaverTopMarketCapCrawler.create()
+        data = crawler.crawling([1,num])
+        codes = [ {'code':item.code, 'name':item.name}  for item in data ]
+        return codes
+
+    def load(self, name):
+        return pd.read_hdf(name, key='df')
+    
+    def loadStockFromDict(self, name, targets, beforeStr, endStr):
+        prices = dict()
+        if not os.path.isfile(name):
+            date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+            progress = 0
+            compliteLen = len(targets.keys())
+            for key in targets:
+                print(targets[key],'collect...', str(progress),'/',str(compliteLen) ,str(progress/compliteLen)+'%')
+                crawler = NaverStockCrawler.create(key)
+                data = crawler.crawling(date)
+                prices[targets[key]] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+                progress+=1
+
+            topdf = pd.DataFrame(prices)
+            topdf.to_hdf(name, key='df', mode='w')
+        else:
+            topdf = pd.read_hdf(name, key='df')
+        return topdf
+    
+    def loadStockFromArr(self, name, targets, beforeStr, endStr):
+        prices = dict()
+        if not os.path.isfile(name):
+            date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+            for target in targets:
+                print(target['name'], 'collect...')
+                crawler = NaverStockCrawler.create(target['code'])
+                data = crawler.crawling(date)
+                prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+            bonddf = pd.DataFrame(prices)
+            bonddf.to_hdf(name, key='df', mode='w')
+        else:
+            print('read...')
+            bonddf = pd.read_hdf(name, key='df')
+        return bonddf
+    
+    def loadDomesticIndex(self, name, beforeStr, endStr):
+        crawler = NaverCrawler.create(targetName=name)
+        date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+        data = crawler.crawling(dateData=date)
+        df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
+        for v in data:
+            df.loc[v.index()] = v.value()
+        return df
+
 sl = StockLoader.create()
-st = StockTransaction.create()
 #시가총액순 종목
 topcap = sl.load('ZIPTOPCAP2007-01-01-2019-12-31.h5')
 
@@ -60,11 +116,72 @@ bonddf = sl.loadStockFromArr('BOND'+beforeStr+'-'+endStr+'.h5',[{'code':'114260'
 
 # In[4]: 시뮬레이션
 
-#투자금
-money = 10000000
-#현금비율
-rebalaceRate = 0
-targetDict = {}
+
+
+class StockTransaction:
+    @staticmethod
+    def create():
+        st = StockTransaction()
+        return st
+    
+    def getMomentumMean(self, current, df, mNum, mUnit):
+        mdf = df.resample('M').mean()
+        beforeMomentumDate = current + pd.Timedelta(-mNum, unit=mUnit)
+        start = mdf.index.get_loc(beforeMomentumDate, method='nearest')
+        end = mdf.index.get_loc(current, method='nearest')
+        oneYearDf = mdf.iloc[start:end+1]
+        momentum = oneYearDf.iloc[-1] - oneYearDf
+        momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
+        return momentumScore.mean()
+
+    def getMomentumInvestRate(self, momentumScoreMean, shareNum, cashRate):
+        sortValue = momentumScoreMean.sort_values(ascending=False)
+        share = sortValue.head(shareNum)
+        distMoney = share / (share + cashRate)
+        sumMoney = distMoney.sum()
+        return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
+
+    def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit):
+        momentumScoreMean = self.getMomentumMean(current, topdf, mNum=mNum, mUnit=mUnit)
+        rate = self.getMomentumInvestRate(momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate)
+        shares.investRate = rate['invest']
+        shares.perMoneyRate = rate['perMoney']
+
+    def buy(shares, wallet, buyDate, valuedf):
+        money = shares.investMoney
+        rateMoney = shares.investRate * shares.investMoney
+        stockWallet = wallet.stockWallet
+        stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
+        rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
+        intersect = list(set(stockWallet.columns) & set(rowdf.columns))
+        if buyDate not in stockWallet.index:
+            stockWallet = pd.concat([stockWallet, rowdf], axis=0)
+        else:
+            if len(intersect) > 0:
+                stockWallet.loc[buyDate, intersect] = 0
+                rowdf = rowdf.drop(columns=intersect)
+                stockWallet = pd.concat([stockWallet, rowdf], axis=1)
+            else:
+                stockWallet = pd.concat([stockWallet, rowdf], axis=1)
+        for col in rateMoney.index:
+            rMoney = rateMoney[col]
+            sValue = stockValue[col]
+            while (rMoney - sValue) > 0:
+                if col in stockWallet.columns and buyDate in stockWallet.index:
+                    stockWallet[col][buyDate] = stockWallet[col][buyDate] + 1
+                money -= sValue
+                rMoney -= sValue
+        wallet.stockWallet = wallet
+        shares.restMoney += money
+
+    def restInvestBuy(buyDate, valuedf, money, wallet):
+        bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][restBond]
+        stockNum = 0
+        while bondValue < money:
+            money -= bondValue
+            stockNum += 1
+        wallet.bondNum = stockNum
+        wallet.restMoney += money
 
 class Shares:
     def __init__(self, name, shareNum, moneyRate, shareList):
@@ -79,9 +196,37 @@ class Shares:
         self.investMoney = self.moneyRate/sumMoneyRate * stockMoney * self.perMoneyRate
         self.restMoney = self.moneyRate/sumMoneyRate * stockMoney * (1 - self.perMoneyRate)
 
+class Wallet:
+    def __init__(self):
+        self.stockWallet = pd.DataFrame()
+        self.moneyWallet = pd.DataFrame()
+        self.stockMoney = 0
+        self.restMoney = 0
+        self.bondNum = 0
+    def goOneMonth(self, current, topdf, bonddf, allIndex):
+        beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
+        buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
+        self.moneyWallet = pd.concat([self.moneyWallet, buyMoney])
+    
+        current = current + pd.Timedelta(1, unit='M')
+        stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
+        self.restMoney = self.restMoney + self.bondNum * bonddf.iloc[bonddf.index.get_loc(current, method='nearest')][bonddf.columns[0]]
+        self.stockMoney = (self.stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
+        return current
+
+        
+#투자금
+money = 10000000
+#현금비율
+rebalaceRate = 0
+st = StockTransaction.create()
+
+
 bond = Shares('bond', shareNum=0, moneyRate=0, shareList=[])
 foreign = Shares('foreign', shareNum=0, moneyRate=0, shareList=[])
-domestic = Shares('domestic', shareNum=0, moneyRate=0, shareList=[])
+domestic = Shares('domestic', shareNum=10, moneyRate=1, shareList=[])
+wallet = Wallet()
+moneySum = pd.DataFrame()
 current = startDate
 
 while endDate > current:
@@ -101,37 +246,23 @@ while endDate > current:
     foreign.calculateInvestMoney(sumMoneyRate, stockMoney)
     domestic.calculateInvestMoney(sumMoneyRate, stockMoney)
 
-    ###여기까지 했음
+    st.buy(bond, wallet, current, topdf)
+    st.buy(foreign, wallet, current, topdf)
+    st.buy(domestic, wallet, current, topdf)
 
-    stockRestMoney += (bondRateRestMoney + foreignRateRestMoney + domesticRateRestMoney)
+    sumRestMoney = bond.restMoney + foreign.restMoney + domestic.restMoney
 
-    bondRestMoney, stockWallet = buy(bondRate, current, topdf, bondMoney, stockWallet)
-    # printPd('채권잔금:', stockWallet)
-    foreignRestMoney, stockWallet = buy(foreignRate, current, topdf, foreignMoney, stockWallet)
-    # printPd('해외잔금:', stockWallet)
-    domesticRestMoney, stockWallet = buy(domesticRate, current, topdf, domesticMoney, stockWallet)
-    # printPd('국내잔금:', stockWallet)
-    stockRestMoney += (bondRestMoney + foreignRestMoney + domesticRestMoney)
+    st.restInvestBuy(current, bonddf, sumRestMoney, wallet)
 
-    bondNum, restMoney = restBondBuy(current, bonddf, stockRestMoney + restMoney)
-
-    allIndex = list(bondRate.index) + list(foreignRate.index) + list(domesticRate.index)
+    allIndex = list(bond.investRate.index) + list(foreign.investRate.index) + list(domestic.investRate.index)
     allIndex = list(set(allIndex))
     # print(allIndex)
 
-    beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-    print(stockWallet)
-    buyMoney = pd.DataFrame([(stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=stockWallet.columns)
-    moneyWallet = pd.concat([moneyWallet, buyMoney])
-   
-    current = current + pd.Timedelta(1, unit='M')
-    stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-    restMoney = restMoney + bondNum * bonddf.iloc[bonddf.index.get_loc(current, method='nearest')][restBond]
+    current = wallet.goOneMonth(current, topdf, bonddf, allIndex)
 
     #구매
     # print(money)
     # printPd('##현재자산가치', (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum() + money)
-    stockMoney = (stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
     # print('잔금',restMoney)
     # restMoney = stockRestMoney + restMoney
     # printPd('##수익률', stockValue / beforeValue)
@@ -140,9 +271,13 @@ while endDate > current:
     # print('현금', restMoney)
     # print('total', restMoney + stockMoney)
     # print('수익률', (stockMoney + restMoney)/money )
-    moneydf = pd.DataFrame( [[stockMoney + restMoney, stockMoney, restMoney]],index=[current], columns=['total', 'stock', 'rest'])
+    moneydf = pd.DataFrame( [[wallet.stockMoney + wallet.restMoney, wallet.stockMoney, wallet.restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
-    money = stockMoney + restMoney
+    money = wallet.stockMoney + wallet.restMoney
+
+print('##소유주식', wallet.stockWallet)
+print('##주식가격', wallet.moneyWallet)
+print('##Total', moneySum)
 
 
 
