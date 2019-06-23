@@ -1,10 +1,14 @@
-from urllib.request import urlopen
+# from urllib.request import urlopen
+import urllib3
 import bs4
 from functools import reduce
 import itertools
 from crawler.data.NaverResultData import NaverResultData
 from crawler.data.NaverDate import NaverDate
     
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) 
+http = urllib3.PoolManager()
+
 class NaverCrawler:
     @staticmethod
     def create(targetName):
@@ -22,7 +26,8 @@ class NaverCrawler:
         data = []
         isRunning = True
         while(isRunning):
-            text = urlopen(self.makeUrl(pageNo)).read()
+            r = http.request('GET', self.makeUrl(pageNo), timeout=10, retries=10)
+            text = r.data
             soup = bs4.BeautifulSoup(text, 'lxml')
             table = soup.find(class_='type_1')
             #table 자식
@@ -37,9 +42,16 @@ class NaverCrawler:
             values = map(lambda value: value.stripped_strings, tdsf)
             #1차원으로 변경
             strings = list(itertools.chain(*values))
+
             #6개씩 자름
             splitData = [strings[i:i + 6] for i in range(0, len(strings), 6)]
             for one in splitData:
+                if not len(one) == 6 :
+                    isRunning = False
+                    break
+                if len(one[0]) < 8:
+                    isRunning = False
+                    break
                 date = NaverDate.formatDate(date=one[0])
                 # print(dateData.startDate)
                 # print(date)
@@ -60,10 +72,11 @@ class NaverCrawler:
             # for value in data:
                 # print(value)
             # print(data)
+            if not isRunning:
+                break
             if soup.find('td', class_='pgRR'):
                 pageNo += 1
             else:
                 break
         return data
-
 

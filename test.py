@@ -5,6 +5,7 @@ from crawler.NaverTopMarketCapCrawler import NaverTopMarketCapCrawler
 from crawler.NaverCapFromCodeCrawler import NaverCapFromCodeCrawler
 from crawler.NaverStockCrawler import NaverStockCrawler
 from crawler.NavarSearchCodeCrawler import NavarSearchCodeCrawler
+from crawler.NaverPbrCrawler import NaverPbrCrawler
 
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
@@ -37,4 +38,15 @@ topdf
 # data = crawler.crawling()
 # data
 
+# In[4]: test2
+print('collect...')
+crawler = NaverCrawler.create(targetName='KOSPI')
+date = NaverDate.create(startDate='2007-01-01', endDate='2019-12-31')
+data = crawler.crawling(dateData=date)
+print(data)
+
+# In[5]: pbr test
+crawler = NaverPbrCrawler()
+data = crawler.crawling('005930')
+print(data)
 #%%

@@ -1,3 +1,4 @@
+
 # In[1]: Import
 from crawler.NaverCrawler import NaverCrawler
 from crawler.NaverWorldCrawler import NaverWorldCrawler
@@ -5,6 +6,7 @@ from crawler.NaverTopMarketCapCrawler import NaverTopMarketCapCrawler
 from crawler.NaverCapFromCodeCrawler import NaverCapFromCodeCrawler
 from crawler.NaverStockCrawler import NaverStockCrawler
 from crawler.NavarSearchCodeCrawler import NavarSearchCodeCrawler
+from crawler.NaverPbrCrawler import NaverPbrCrawler
 
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
@@ -19,6 +21,7 @@ import time
 import random
 import os.path
 
+
 # In[2]: font 설정
 import matplotlib.font_manager as fm
 import matplotlib as mpl
@@ -32,8 +35,8 @@ print(font_name)
 mpl.rc('font', family=font_name) 
 
 # In[2]: date
-startDateStr = '2008-01-01'
-endDateStr = '2018-12-31'
+startDateStr = '2007-01-01'
+endDateStr = '2019-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
 before = startDate + pd.Timedelta(-1, unit='Y')
@@ -47,6 +50,9 @@ class StockLoader:
     def create():
         stockloader = StockLoader()
         return stockloader
+    
+    def makeName(self, name):
+        return name + '_' + startDateStr + '_' + endDateStr + '.h5'
 
     def topk(self, num):
         crawler = NaverTopMarketCapCrawler.create()
@@ -55,6 +61,7 @@ class StockLoader:
         return codes
 
     def load(self, name):
+        print(name, 'read...')
         return pd.read_hdf(name, key='df')
     
     def loadStockFromDict(self, name, targets, beforeStr, endStr):
@@ -73,6 +80,7 @@ class StockLoader:
             topdf = pd.DataFrame(prices)
             topdf.to_hdf(name, key='df', mode='w')
         else:
+            print(name, 'read...')
             topdf = pd.read_hdf(name, key='df')
         return topdf
     
@@ -88,31 +96,41 @@ class StockLoader:
             bonddf = pd.DataFrame(prices)
             bonddf.to_hdf(name, key='df', mode='w')
         else:
-            print('read...')
+            print(name, 'read...')
             bonddf = pd.read_hdf(name, key='df')
         return bonddf
     
     def loadDomesticIndex(self, name, beforeStr, endStr):
-        crawler = NaverCrawler.create(targetName=name)
-        date = NaverDate.create(startDate=beforeStr, endDate=endStr)
-        data = crawler.crawling(dateData=date)
-        df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
-        for v in data:
-            df.loc[v.index()] = v.value()
+        if not os.path.isfile(name):
+            print(name, 'collect...')
+            crawler = NaverCrawler.create(targetName=name.split('_')[0])
+            date = NaverDate.create(startDate=beforeStr, endDate=endStr)
+            data = crawler.crawling(dateData=date)
+            df = pd.DataFrame(columns=['종가', '전일비', '등락률', '거래량', '거래대금'])
+            for v in data:
+                df.loc[v.index()] = v.value()
+            df.to_hdf(name, key='df', mode='w')
+        else:
+            print(name, 'read...')
+            df = pd.read_hdf(name, key='df')
         return df
 
 sl = StockLoader.create()
 #시가총액순 종목
-topcap = sl.load('ZIPTOPCAP2007-01-01-2019-12-31.h5')
+topcap = sl.load(sl.makeName('TOPCAP'))
 
 #시가
 targetShares = {}
 for index, row  in topcap.iterrows():
     targetShares[row['Code']] = row['Name']
 #종목별 종가
-topdf = sl.loadStockFromDict('STOCKZIPTOPCAP2007-01-01-2019-12-31.h5',targetShares, beforeStr, endDateStr)
+topdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP'),targetShares, beforeStr, endDateStr)
 #채권 종가
-bonddf = sl.loadStockFromArr('BOND'+beforeStr+'-'+endStr+'.h5',[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
+bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
+kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI'), beforeStr, endDateStr)
+
+# In[5]: look
+kospidf
 
 # In[4]: 시뮬레이션
 
@@ -156,14 +174,14 @@ class StockTransaction:
         rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
         intersect = list(set(stockWallet.columns) & set(rowdf.columns))
         if buyDate not in stockWallet.index:
-            stockWallet = pd.concat([stockWallet, rowdf], axis=0)
+            stockWallet = pd.concat([stockWallet, rowdf], axis=0, sort=False)
         else:
             if len(intersect) > 0:
                 stockWallet.loc[buyDate, intersect] = 0
                 rowdf = rowdf.drop(columns=intersect)
-                stockWallet = pd.concat([stockWallet, rowdf], axis=1)
+                stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
             else:
-                stockWallet = pd.concat([stockWallet, rowdf], axis=1)
+                stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
         for col in rateMoney.index:
             rMoney = rateMoney[col]
             sValue = stockValue[col]
@@ -207,7 +225,7 @@ class Wallet:
     def goOneMonth(self, current, topdf, bonddf, allIndex):
         beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
         buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
-        self.moneyWallet = pd.concat([self.moneyWallet, buyMoney])
+        self.moneyWallet = pd.concat([self.moneyWallet, buyMoney], sort=False)
     
         current = current + pd.Timedelta(1, unit='M')
         stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
@@ -238,9 +256,9 @@ while endDate > current:
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
+    st.setMonmentumRate(bond, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
     bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
@@ -272,7 +290,7 @@ while endDate > current:
     # print('현금', restMoney)
     # print('수익률', (stockMoney + restMoney)/money )
     moneydf = pd.DataFrame( [[wallet.stockMoney + wallet.restMoney, wallet.stockMoney, wallet.restMoney]],index=[current], columns=['total', 'stock', 'rest'])
-    moneySum = pd.concat([moneySum, moneydf])
+    moneySum = pd.concat([moneySum, moneydf], sort=False)
     money = wallet.stockMoney + wallet.restMoney
     print('total', money, wallet.stockMoney, wallet.restMoney)
 
@@ -280,6 +298,31 @@ while endDate > current:
 print('##소유주식', wallet.stockWallet)
 print('##주식가격', wallet.moneyWallet)
 print('##Total', moneySum)
+
+# In[6]: 통계
+moneySum.index = moneySum.index.map(lambda dt: pd.to_datetime(dt.date()))
+
+portfolio = moneySum['total'] / moneySum['total'].iloc[0]
+투자기간 = len(moneySum.index)/12
+# print(portfolio)
+print('연평균 수익률',(portfolio[-1]**(1/투자기간)*100-100))
+
+print('최대 하락률',((portfolio.shift(1) - portfolio)*100).min())
+print('최대 상승률',((portfolio.shift(1) - portfolio)*100).max())
+
+# In[7]: 그래프
+# In[15]: 그래프 그리기
+choosedDf = moneySum[['total']]
+choosedDf['KOSPI'] = kospidf['종가']
+choosedDf[bonddf.columns[0]] = bonddf[bonddf.columns[0]]
+choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
+# print(choosedDf)
+jisuDf = choosedDf / choosedDf.iloc[0]
+print(jisuDf)
+plt = jisuDf.plot(figsize = (18,12), fontsize=12)
+fontProp = fm.FontProperties(fname=path, size=18)
+plt.legend(prop=fontProp)
+print(plt)
 
 
 
