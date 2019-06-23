@@ -4,7 +4,7 @@ import bs4
 from functools import reduce
 import itertools
 # from crawler.data.NaverStockResultData import NaverStockResultData
-from data.NaverDate import NaverDate
+# from crawler.data.NaverDate import NaverDate
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -34,7 +34,7 @@ class NaverPbrCrawler:
 
     def crawling(self, code):
         #'C:/Users/lsj/Downloads/phantomjs-2.1.1-windows/bin/phantomjs.exe'
-        driver = webdriver.PhantomJS()
+        driver = webdriver.PhantomJS('C:/Users/lsj/Downloads/phantomjs-2.1.1-windows/bin/phantomjs.exe')
         driver.get(self.makeUrl(code))
         text = driver.page_source
         soup = bs4.BeautifulSoup(text, 'lxml')
