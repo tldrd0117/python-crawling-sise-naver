@@ -138,6 +138,7 @@ class StockTransaction:
         sortValue = momentumScoreMean.sort_values(ascending=False)
         share = sortValue.head(shareNum)
         distMoney = share / (share + cashRate)
+        distMoney = distMoney[distMoney > 0.4]
         sumMoney = distMoney.sum()
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
 
@@ -147,7 +148,7 @@ class StockTransaction:
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
 
-    def buy(shares, wallet, buyDate, valuedf):
+    def buy(self, shares, wallet, buyDate, valuedf):
         money = shares.investMoney
         rateMoney = shares.investRate * shares.investMoney
         stockWallet = wallet.stockWallet
@@ -171,11 +172,11 @@ class StockTransaction:
                     stockWallet[col][buyDate] = stockWallet[col][buyDate] + 1
                 money -= sValue
                 rMoney -= sValue
-        wallet.stockWallet = wallet
+        wallet.stockWallet = stockWallet
         shares.restMoney += money
 
-    def restInvestBuy(buyDate, valuedf, money, wallet):
-        bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][restBond]
+    def restInvestBuy(self, buyDate, valuedf, money, wallet):
+        bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][bonddf.columns[0]]
         stockNum = 0
         while bondValue < money:
             money -= bondValue
@@ -224,27 +225,27 @@ st = StockTransaction.create()
 
 bond = Shares('bond', shareNum=0, moneyRate=0, shareList=[])
 foreign = Shares('foreign', shareNum=0, moneyRate=0, shareList=[])
-domestic = Shares('domestic', shareNum=10, moneyRate=1, shareList=[])
+domestic = Shares('domestic', shareNum=200, moneyRate=1, shareList=[])
 wallet = Wallet()
 moneySum = pd.DataFrame()
 current = startDate
 
 while endDate > current:
     print('simulate...', current)
-    bond.shareList = list(topcap[str(current.year)]['Name'])
-    stockMoney = money * (1-rebalaceRate)
-    restMoney = money * rebalaceRate
+    domestic.shareList = list(topcap[str(current.year)]['Name'])
+    wallet.stockMoney = money * (1-rebalaceRate)
+    wallet.restMoney = money * rebalaceRate
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=1, mNum=12, mUnit='M')
-    st.setMonmentumRate(foreign, current, topdf, cashRate=1, mNum=12, mUnit='M')
-    st.setMonmentumRate(domestic, current, topdf, cashRate=1, mNum=12, mUnit='M')
+    st.setMonmentumRate(bond, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0.5, mNum=6, mUnit='M')
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
-    bond.calculateInvestMoney(sumMoneyRate, stockMoney)
-    foreign.calculateInvestMoney(sumMoneyRate, stockMoney)
-    domestic.calculateInvestMoney(sumMoneyRate, stockMoney)
+    bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
+    foreign.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
+    domestic.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
 
     st.buy(bond, wallet, current, topdf)
     st.buy(foreign, wallet, current, topdf)
@@ -269,11 +270,12 @@ while endDate > current:
     # printPd('##수익률평균', (stockValue / beforeValue).values.mean())
     # print('주식', stockMoney)
     # print('현금', restMoney)
-    # print('total', restMoney + stockMoney)
     # print('수익률', (stockMoney + restMoney)/money )
     moneydf = pd.DataFrame( [[wallet.stockMoney + wallet.restMoney, wallet.stockMoney, wallet.restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf])
     money = wallet.stockMoney + wallet.restMoney
+    print('total', money, wallet.stockMoney, wallet.restMoney)
+
 
 print('##소유주식', wallet.stockWallet)
 print('##주식가격', wallet.moneyWallet)
@@ -287,3 +289,6 @@ print('##Total', moneySum)
 
 
 
+
+
+#%%
