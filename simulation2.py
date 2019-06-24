@@ -130,7 +130,7 @@ bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX
 kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI'), beforeStr, endDateStr)
 
 # In[5]: look
-kospidf
+# kospidf
 
 # In[4]: 시뮬레이션
 
@@ -149,20 +149,22 @@ class StockTransaction:
         end = mdf.index.get_loc(current, method='nearest')
         oneYearDf = mdf.iloc[start:end+1]
         momentum = oneYearDf.iloc[-1] - oneYearDf
+        momentumIndex = (oneYearDf.iloc[-1] - oneYearDf) / oneYearDf
         momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
-        return momentumScore.mean()
+        return momentumIndex.mean(), momentumScore.mean()
 
-    def getMomentumInvestRate(self, momentumScoreMean, shareNum, cashRate):
-        sortValue = momentumScoreMean.sort_values(ascending=False)
-        share = sortValue.head(shareNum)
+    def getMomentumInvestRate(self, momentumMean, momentumScoreMean, shareNum, cashRate):
+        sortValue = momentumMean.sort_values(ascending=False)
+        share = momentumScoreMean[sortValue.head(shareNum).index]
         distMoney = share / (share + cashRate)
-        distMoney = distMoney[distMoney > 0.4]
+        distMoney = distMoney[share > 0.8]
         sumMoney = distMoney.sum()
+        print('investNum',len(list(distMoney.index)))
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
 
     def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit):
-        momentumScoreMean = self.getMomentumMean(current, topdf, mNum=mNum, mUnit=mUnit)
-        rate = self.getMomentumInvestRate(momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate)
+        momentumMean, momentumScoreMean = self.getMomentumMean(current, topdf, mNum=mNum, mUnit=mUnit)
+        rate = self.getMomentumInvestRate(momentumMean[shares.shareList], momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate)
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
 
@@ -233,11 +235,12 @@ class Wallet:
         self.stockMoney = (self.stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
         return current
 
+
         
 #투자금
 money = 10000000
 #현금비율
-rebalaceRate = 0
+rebalaceRate = 0.25
 st = StockTransaction.create()
 
 
@@ -256,9 +259,9 @@ while endDate > current:
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0.1, mNum=6, mUnit='M')
+    st.setMonmentumRate(bond, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
     bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
