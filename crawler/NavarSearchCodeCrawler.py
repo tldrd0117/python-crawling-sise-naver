@@ -39,7 +39,7 @@ class NavarSearchCodeCrawler:
                 href = str(a['href'])
                 name = a.string
                 if href.startswith('/item/main.nhn?code='):
-                    data.append({'code':href.replace('/item/main.nhn?code=', ''),'name':name})
+                    data.append({'Code':href.replace('/item/main.nhn?code=', ''),'Name':name})
                 if href.startswith('/search/searchList.nhn?query='+self.targetName+'&page='):
                     num = href.replace('/search/searchList.nhn?query='+self.targetName+'&page=', '')
                     if num.isdecimal() and topPageNo < int(num):

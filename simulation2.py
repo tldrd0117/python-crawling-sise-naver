@@ -26,16 +26,21 @@ import os.path
 import matplotlib.font_manager as fm
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import platform
+
 
 startTime = time.time()  # 시작 시간 저장
 
-path = '/Library/Fonts/NanumBarunGothicLight.otf'
+if platform.system()=='Darwin':
+    path = '/Library/Fonts/NanumBarunGothicLight.otf'
+else:
+    path = 'C:/Windows/Fonts/malgun.ttf'
 font_name = fm.FontProperties(fname=path, size=18).get_name()
 print(font_name)
 mpl.rc('font', family=font_name) 
 
 # In[2]: date
-startDateStr = '2007-01-01'
+startDateStr = '2012-01-01'
 endDateStr = '2019-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
@@ -43,6 +48,8 @@ before = startDate + pd.Timedelta(-1, unit='Y')
 end = endDate
 beforeStr = before.strftime(format='%Y-%m-%d')
 endStr = end.strftime(format='%Y-%m-%d')
+
+print(beforeStr, endStr)
 
 # In[3]: 주식 불러오기
 class StockLoader:
@@ -52,7 +59,7 @@ class StockLoader:
         return stockloader
     
     def makeName(self, name):
-        return name + '_' + startDateStr + '_' + endDateStr + '.h5'
+        return name + '_' + beforeStr + '_' + endDateStr + '.h5'
 
     def topk(self, num):
         crawler = NaverTopMarketCapCrawler.create()
@@ -89,10 +96,10 @@ class StockLoader:
         if not os.path.isfile(name):
             date = NaverDate.create(startDate=beforeStr, endDate=endStr)
             for target in targets:
-                print(target['name'], 'collect...')
-                crawler = NaverStockCrawler.create(target['code'])
+                print(target['Name'], 'collect...')
+                crawler = NaverStockCrawler.create(target['Code'])
                 data = crawler.crawling(date)
-                prices[target['name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+                prices[target['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
             bonddf = pd.DataFrame(prices)
             bonddf.to_hdf(name, key='df', mode='w')
         else:
@@ -114,19 +121,65 @@ class StockLoader:
             print(name, 'read...')
             df = pd.read_hdf(name, key='df')
         return df
+    
+    def loadSearchCodeName(self, name):
+        crawler = NavarSearchCodeCrawler.create(name)
+        return crawler.crawling()
+
+    def chooseCodeName(self, filterList, items):
+        return [ {'Name':t['Name'], 'Code':t['Code']} for word in filterList for t in filter(lambda x : x['Name'].find(word) >= 0, items)]
+    
+    def exceptCodeName(self, filterList, items):
+        targetList = []
+        for target in items:
+            isIn = False
+            for word in filterList:
+                if target['Name'].find(word) > 0:
+                    isIn = True
+                    break
+            if not isIn:
+                targetList.append({'Name':target['Name'], 'Code':target['Code']})
+
+        return targetList
 
 sl = StockLoader.create()
+
+
+# In[23]: ETF
+#KODEX 종목 (삼성자산운용)
+blackWords = ['액티브', '삼성']
+bondWords = [' 국고채', ' 국채']
+foreignWords = ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '차이나', '라틴', '유로', '(H)', '인도', '하이일드']
+KODEX = sl.loadSearchCodeName('KODEX')
+KODEX = sl.exceptCodeName(blackWords, KODEX)
+KODEX_bond = sl.chooseCodeName(bondWords, KODEX)
+KODEX_foreign = sl.chooseCodeName(foreignWords, KODEX)
+KODEX_domestic = sl.exceptCodeName(bondWords + foreignWords, KODEX)
+
+
+#TIGER 종목 (미래에셋대우)
+TIGER = sl.loadSearchCodeName('TIGER')
+TIGER = sl.exceptCodeName(blackWords, TIGER)
+TIGER_bond = sl.chooseCodeName(bondWords, TIGER)
+TIGER_foreign = sl.chooseCodeName(foreignWords, TIGER)
+TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords, TIGER)
+
+
+# In[24]: load
+
 #시가총액순 종목
-topcap = sl.load(sl.makeName('TOPCAP'))
+# topcap = sl.load(sl.makeName('TOPCAP'))
 
 #시가
-targetShares = {}
-for index, row  in topcap.iterrows():
-    targetShares[row['Code']] = row['Name']
+# targetShares = {}
+# for index, row  in topcap.iterrows():
+    # targetShares[row['Code']] = row['Name']
 #종목별 종가
-topdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP'),targetShares, beforeStr, endDateStr)
+topdf = sl.loadStockFromArr(sl.makeName('ETF'), KODEX + TIGER, beforeStr, endDateStr)
+# topdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP'),targetShares, beforeStr, endDateStr)
+# bonddf = sl.loadStockFromArr(sl.makeName('BOND_ETF'), KODEX_bond + TIGER_bond, beforeStr, endDateStr)
 #채권 종가
-bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
+# bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
 kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI'), beforeStr, endDateStr)
 
 # In[5]: look
@@ -149,17 +202,20 @@ class StockTransaction:
         end = mdf.index.get_loc(current, method='nearest')
         oneYearDf = mdf.iloc[start:end+1]
         momentum = oneYearDf.iloc[-1] - oneYearDf
-        momentumIndex = (oneYearDf.iloc[-1] - oneYearDf) / oneYearDf
+        momentumIndex = momentum / oneYearDf
         momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
         return momentumIndex.mean(), momentumScore.mean()
 
-    def getMomentumInvestRate(self, momentumMean, momentumScoreMean, shareNum, cashRate):
-        sortValue = momentumMean.sort_values(ascending=False)
-        share = momentumScoreMean[sortValue.head(shareNum).index]
+    def getMomentumInvestRate(self, momentumIndex, momentumScoreMean, shareNum, cashRate):
+        sortValue = momentumIndex.sort_values(ascending=False)
+        sortValue = sortValue.dropna()
+        # print(1,sortValue.head(shareNum).index)
+        # print(2,momentumScoreMean)
+        share = momentumScoreMean[list(sortValue.head(shareNum).index)]
         distMoney = share / (share + cashRate)
-        distMoney = distMoney[share > 0.8]
+        distMoney = distMoney[share > 0.25]
+        print('investNum', len(distMoney.index))
         sumMoney = distMoney.sum()
-        print('investNum',len(list(distMoney.index)))
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
 
     def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit):
@@ -202,7 +258,8 @@ class StockTransaction:
             money -= bondValue
             stockNum += 1
         wallet.bondNum = stockNum
-        wallet.restMoney += money
+        wallet.restMoney = money
+
 
 class Shares:
     def __init__(self, name, shareNum, moneyRate, shareList):
@@ -210,12 +267,16 @@ class Shares:
         self.shareNum = shareNum
         self.moneyRate = moneyRate
         self.shareList = shareList
-        self.investRate = 0
-        self.perMoneyRate = 0
+        self.investRate = None
+        self.perMoneyRate = None
     
     def calculateInvestMoney(self, sumMoneyRate, stockMoney):
         self.investMoney = self.moneyRate/sumMoneyRate * stockMoney * self.perMoneyRate
         self.restMoney = self.moneyRate/sumMoneyRate * stockMoney * (1 - self.perMoneyRate)
+    
+    @staticmethod
+    def toNameList(dictList):
+        return list(set([ dic['Name'] for dic in dictList ]))
 
 class Wallet:
     def __init__(self):
@@ -231,37 +292,43 @@ class Wallet:
     
         current = current + pd.Timedelta(1, unit='M')
         stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-        self.restMoney = self.restMoney + self.bondNum * bonddf.iloc[bonddf.index.get_loc(current, method='nearest')][bonddf.columns[0]]
+        
+        if bonddf:
+            self.restMoney = self.restMoney + self.bondNum * bonddf.iloc[bonddf.index.get_loc(current, method='nearest')][bonddf.columns[0]]
         self.stockMoney = (self.stockWallet.iloc[-1][stockValue.index] * stockValue).values.sum()
         return current
-
-
         
 #투자금
 money = 10000000
 #현금비율
 rebalaceRate = 0.25
 st = StockTransaction.create()
+bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
+foreignList = Shares.toNameList(KODEX_foreign+TIGER_foreign)
+domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 
+bondListNum = int(len(KODEX_bond+TIGER_bond) * 3 / 10)
+foreignListNum = int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
+domesticListNum = int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
-bond = Shares('bond', shareNum=0, moneyRate=0, shareList=[])
-foreign = Shares('foreign', shareNum=0, moneyRate=0, shareList=[])
-domestic = Shares('domestic', shareNum=200, moneyRate=1, shareList=[])
+bond = Shares('bond', shareNum=bondListNum, moneyRate=2, shareList=bondList)
+foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
+domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=domesticList)
 wallet = Wallet()
 moneySum = pd.DataFrame()
 current = startDate
 
 while endDate > current:
     print('simulate...', current)
-    domestic.shareList = list(topcap[str(current.year)]['Name'])
+    # domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
     wallet.restMoney = money * rebalaceRate
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0.3, mNum=6, mUnit='M')
+    st.setMonmentumRate(bond, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
     bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
@@ -272,15 +339,16 @@ while endDate > current:
     st.buy(foreign, wallet, current, topdf)
     st.buy(domestic, wallet, current, topdf)
 
-    sumRestMoney = bond.restMoney + foreign.restMoney + domestic.restMoney
-
-    st.restInvestBuy(current, bonddf, sumRestMoney, wallet)
+    #사고남은돈 + 지갑에 남은돈
+    sumRestMoney = bond.restMoney + foreign.restMoney + domestic.restMoney + wallet.restMoney
+    wallet.restMoney = sumRestMoney
+    # st.restInvestBuy(current, bonddf, sumRestMoney, wallet)
 
     allIndex = list(bond.investRate.index) + list(foreign.investRate.index) + list(domestic.investRate.index)
     allIndex = list(set(allIndex))
     # print(allIndex)
 
-    current = wallet.goOneMonth(current, topdf, bonddf, allIndex)
+    current = wallet.goOneMonth(current, topdf, None, allIndex)
 
     #구매
     # print(money)

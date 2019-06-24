@@ -34,7 +34,7 @@ class NaverPbrCrawler:
 
     def crawling(self, code):
         #'C:/Users/lsj/Downloads/phantomjs-2.1.1-windows/bin/phantomjs.exe'
-        driver = webdriver.PhantomJS()
+        driver = webdriver.PhantomJS('C:/Users/lsj/Downloads/phantomjs-2.1.1-windows/bin/phantomjs.exe')
         driver.get(self.makeUrl(code))
         text = driver.page_source
         soup = bs4.BeautifulSoup(text, 'lxml')
