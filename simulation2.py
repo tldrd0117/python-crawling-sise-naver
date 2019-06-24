@@ -30,7 +30,7 @@ import platform
 
 
 startTime = time.time()  # 시작 시간 저장
-
+print(platform.system())
 if platform.system()=='Darwin':
     path = '/Library/Fonts/NanumBarunGothicLight.otf'
 else:
@@ -41,7 +41,7 @@ mpl.rc('font', family=font_name)
 
 # In[2]: date
 startDateStr = '2012-01-01'
-endDateStr = '2019-12-31'
+endDateStr = '2018-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
 before = startDate + pd.Timedelta(-1, unit='Y')
@@ -58,7 +58,7 @@ class StockLoader:
         stockloader = StockLoader()
         return stockloader
     
-    def makeName(self, name):
+    def makeName(self, name, beforeStr=beforeStr, endDateStr=endDateStr):
         return name + '_' + beforeStr + '_' + endDateStr + '.h5'
 
     def topk(self, num):
@@ -149,7 +149,7 @@ sl = StockLoader.create()
 #KODEX 종목 (삼성자산운용)
 blackWords = ['액티브', '삼성']
 bondWords = [' 국고채', ' 국채']
-foreignWords = ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '원유', 'WTI', '글로벌', '차이나', '라틴', '유로', '(H)', '인도', '하이일드']
+foreignWords = ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '글로벌', '차이나', '라틴', '유로', '인도', '하이일드']
 KODEX = sl.loadSearchCodeName('KODEX')
 KODEX = sl.exceptCodeName(blackWords, KODEX)
 KODEX_bond = sl.chooseCodeName(bondWords, KODEX)
@@ -168,22 +168,28 @@ TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords, TIGER)
 # In[24]: load
 
 #시가총액순 종목
-# topcap = sl.load(sl.makeName('TOPCAP'))
+topcap = sl.load(sl.makeName('TOPCAP', '2005-12-31', '2019-12-31'))
 
 #시가
-# targetShares = {}
-# for index, row  in topcap.iterrows():
-    # targetShares[row['Code']] = row['Name']
+targetShares = {}
+for index, row  in topcap.iterrows():
+    targetShares[row['Code']] = row['Name']
 #종목별 종가
-topdf = sl.loadStockFromArr(sl.makeName('ETF'), KODEX + TIGER, beforeStr, endDateStr)
-# topdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP'),targetShares, beforeStr, endDateStr)
+etfdf = sl.loadStockFromArr(sl.makeName('ETF', endDateStr='2019-12-31'), KODEX + TIGER, beforeStr, '2019-12-31')
+topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2005-12-31', endDateStr='2019-12-31'), targetShares, '2005-12-31', '2019-12-31')
+etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
+topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
+topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND_ETF'), KODEX_bond + TIGER_bond, beforeStr, endDateStr)
 #채권 종가
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
 kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI'), beforeStr, endDateStr)
+topdf
+# topcapdf.loc['2012-01-01':endDateStr]
 
 # In[5]: look
 # kospidf
+# len(KODEX_foreign+TIGER_foreign)
 
 # In[4]: 시뮬레이션
 
@@ -206,21 +212,20 @@ class StockTransaction:
         momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
         return momentumIndex.mean(), momentumScore.mean()
 
-    def getMomentumInvestRate(self, momentumIndex, momentumScoreMean, shareNum, cashRate):
+    def getMomentumInvestRate(self, momentumIndex, momentumScoreMean, shareNum, cashRate, mementumLimit):
         sortValue = momentumIndex.sort_values(ascending=False)
         sortValue = sortValue.dropna()
         # print(1,sortValue.head(shareNum).index)
         # print(2,momentumScoreMean)
         share = momentumScoreMean[list(sortValue.head(shareNum).index)]
         distMoney = share / (share + cashRate)
-        distMoney = distMoney[share > 0.25]
-        print('investNum', len(distMoney.index))
+        distMoney = distMoney[share > mementumLimit]
         sumMoney = distMoney.sum()
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
 
-    def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit):
+    def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit, mementumLimit):
         momentumMean, momentumScoreMean = self.getMomentumMean(current, topdf, mNum=mNum, mUnit=mUnit)
-        rate = self.getMomentumInvestRate(momentumMean[shares.shareList], momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate)
+        rate = self.getMomentumInvestRate(momentumMean[shares.shareList], momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate, mementumLimit=mementumLimit)
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
 
@@ -250,6 +255,11 @@ class StockTransaction:
                 rMoney -= sValue
         wallet.stockWallet = stockWallet
         shares.restMoney += money
+        print('투자리스트')
+        print('=================================================')
+        print('investNum', len(rateMoney.index), '투자금 합계: ',rateMoney.sum() - money)
+        print(list(rateMoney.index))
+        print('=================================================')
 
     def restInvestBuy(self, buyDate, valuedf, money, wallet):
         bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][bonddf.columns[0]]
@@ -301,34 +311,38 @@ class Wallet:
 #투자금
 money = 10000000
 #현금비율
-rebalaceRate = 0.25
+rebalaceRate = 0
 st = StockTransaction.create()
 bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
-foreignList = Shares.toNameList(KODEX_foreign+TIGER_foreign)
+foreignList = ['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
 domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 
-bondListNum = int(len(KODEX_bond+TIGER_bond) * 3 / 10)
-foreignListNum = int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
-domesticListNum = int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
+bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
+foreignListNum = 5#int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
+domesticListNum = 200#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
-bond = Shares('bond', shareNum=bondListNum, moneyRate=2, shareList=bondList)
-foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
-domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=domesticList)
+print(bondListNum, foreignListNum, domesticListNum)
+
 wallet = Wallet()
 moneySum = pd.DataFrame()
 current = startDate
 
+bond = Shares('bond', shareNum=bondListNum, moneyRate=1, shareList=bondList)
+foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
+domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
+
+
 while endDate > current:
     print('simulate...', current)
-    # domestic.shareList = list(topcap[str(current.year)]['Name'])
+    domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
     wallet.restMoney = money * rebalaceRate
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0.25, mNum=12, mUnit='M')
+    st.setMonmentumRate(bond, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
     bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
@@ -363,7 +377,9 @@ while endDate > current:
     moneydf = pd.DataFrame( [[wallet.stockMoney + wallet.restMoney, wallet.stockMoney, wallet.restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf], sort=False)
     money = wallet.stockMoney + wallet.restMoney
+    print('=================================================')
     print('total', money, wallet.stockMoney, wallet.restMoney)
+    print('=================================================')
 
 
 print('##소유주식', wallet.stockWallet)
@@ -375,8 +391,9 @@ moneySum.index = moneySum.index.map(lambda dt: pd.to_datetime(dt.date()))
 
 portfolio = moneySum['total'] / moneySum['total'].iloc[0]
 투자기간 = len(moneySum.index)/12
+print(투자기간)
 # print(portfolio)
-print('연평균 수익률',(portfolio[-1]**(1/투자기간)*100-100))
+print('연평균 수익률',(portfolio[-2]**(1/투자기간)*100-100))
 
 print('최대 하락률',((portfolio.shift(1) - portfolio)*100).min())
 print('최대 상승률',((portfolio.shift(1) - portfolio)*100).max())
@@ -385,7 +402,7 @@ print('최대 상승률',((portfolio.shift(1) - portfolio)*100).max())
 # In[15]: 그래프 그리기
 choosedDf = moneySum[['total']]
 choosedDf['KOSPI'] = kospidf['종가']
-choosedDf[bonddf.columns[0]] = bonddf[bonddf.columns[0]]
+# choosedDf[bonddf.columns[0]] = bonddf[bonddf.columns[0]]
 choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
 # print(choosedDf)
 jisuDf = choosedDf / choosedDf.iloc[0]
