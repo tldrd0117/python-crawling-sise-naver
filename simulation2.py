@@ -183,8 +183,9 @@ topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND_ETF'), KODEX_bond + TIGER_bond, beforeStr, endDateStr)
 #채권 종가
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
-kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI'), beforeStr, endDateStr)
-topdf
+kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI', '2005-12-31', '2019-12-31'), '2005-12-31', '2019-12-31')
+
+# topdf
 # topcapdf.loc['2012-01-01':endDateStr]
 
 # In[5]: look
@@ -212,6 +213,17 @@ class StockTransaction:
         momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
         return momentumIndex.mean(), momentumScore.mean()
 
+    def get12MomentumMean(self, current, df):
+        mdf = df.resample('M').mean()
+        beforeMomentumDate = current + pd.Timedelta(-1, unit='Y')
+        start = mdf.index.get_loc(beforeMomentumDate, method='nearest')
+        end = mdf.index.get_loc(current, method='nearest')
+        oneYearDf = mdf.iloc[start:end+1]
+        momentum = oneYearDf.iloc[-1] - oneYearDf
+        momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
+        # print(df[momentumScore.iloc[0] > 0])
+        return df[list(momentumScore.iloc[0][momentumScore.iloc[0] > 0].index)]
+
     def getMomentumInvestRate(self, momentumIndex, momentumScoreMean, shareNum, cashRate, mementumLimit):
         sortValue = momentumIndex.sort_values(ascending=False)
         sortValue = sortValue.dropna()
@@ -223,8 +235,10 @@ class StockTransaction:
         sumMoney = distMoney.sum()
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
 
-    def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit, mementumLimit):
-        momentumMean, momentumScoreMean = self.getMomentumMean(current, topdf, mNum=mNum, mUnit=mUnit)
+    def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit, mementumLimit, limit12 = False):
+        momentumdf = topdf if not limit12 else self.get12MomentumMean(current, topdf)
+        # print('momentum:',len(list(momentumdf.columns)))
+        momentumMean, momentumScoreMean = self.getMomentumMean(current, momentumdf, mNum=mNum, mUnit=mUnit)
         rate = self.getMomentumInvestRate(momentumMean[shares.shareList], momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate, mementumLimit=mementumLimit)
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
@@ -261,14 +275,14 @@ class StockTransaction:
         print(list(rateMoney.index))
         print('=================================================')
 
-    def restInvestBuy(self, buyDate, valuedf, money, wallet):
-        bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][bonddf.columns[0]]
-        stockNum = 0
-        while bondValue < money:
-            money -= bondValue
-            stockNum += 1
-        wallet.bondNum = stockNum
-        wallet.restMoney = money
+    # def restInvestBuy(self, buyDate, valuedf, money, wallet):
+        # bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][bonddf.columns[0]]
+        # stockNum = 0
+        # while bondValue < money:
+            # money -= bondValue
+            # stockNum += 1
+        # wallet.bondNum = stockNum
+        # wallet.restMoney = money
 
 
 class Shares:
@@ -295,11 +309,31 @@ class Wallet:
         self.stockMoney = 0
         self.restMoney = 0
         self.bondNum = 0
+
+    def lossCut(self, current, topdf, allIndex):
+        nextDate = current + pd.Timedelta(1, unit='M')
+        indexloc = topdf.index.get_loc(current, method='nearest')
+        firstValue = topdf.iloc[indexloc][allIndex] 
+        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
+        while nextDate > current:
+            beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
+            beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
+            
+            #하루지나감 어렵다
+            current = topdf.index[indexloc+1]
+            
+            stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex][(buyMoney/firstBuyMoney) >= 0.9]
+            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=self.stockWallet.columns)
+            beforeBuyMoney * buyMoney / beforeBuyMoney
+             
+
     def goOneMonth(self, current, topdf, bonddf, allIndex):
         beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
         buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
-        self.moneyWallet = pd.concat([self.moneyWallet, buyMoney], sort=False)
-    
+        
+        
+        # self.moneyWallet = pd.concat([self.moneyWallet, buyMoney], sort=False)
+
         current = current + pd.Timedelta(1, unit='M')
         stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
         
@@ -312,20 +346,23 @@ class Wallet:
 money = 10000000
 #현금비율
 rebalaceRate = 0
+
+current = startDate
+
 st = StockTransaction.create()
 bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
 foreignList = ['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
-domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
+#domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
+domesticList = list(topcap[str(current.year)]['Name'])
 
 bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
 foreignListNum = 5#int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
-domesticListNum = 200#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
+domesticListNum = 150#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
 print(bondListNum, foreignListNum, domesticListNum)
 
 wallet = Wallet()
 moneySum = pd.DataFrame()
-current = startDate
 
 bond = Shares('bond', shareNum=bondListNum, moneyRate=1, shareList=bondList)
 foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
@@ -341,8 +378,8 @@ while endDate > current:
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
     st.setMonmentumRate(bond, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
+    st.setMonmentumRate(foreign, current, topdf, cashRate=0.2, mNum=6, mUnit='M', mementumLimit=0, limit12=False)
+    st.setMonmentumRate(domestic, current, topdf, cashRate=0.2, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True)
     #TARGET
     sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
     bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
@@ -382,8 +419,8 @@ while endDate > current:
     print('=================================================')
 
 
-print('##소유주식', wallet.stockWallet)
-print('##주식가격', wallet.moneyWallet)
+# print('##소유주식', wallet.stockWallet)
+# print('##주식가격', wallet.moneyWallet)
 print('##Total', moneySum)
 
 # In[6]: 통계
