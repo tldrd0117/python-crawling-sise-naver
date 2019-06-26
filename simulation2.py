@@ -20,7 +20,7 @@ from IPython.display import display
 import time
 import random
 import os.path
-
+from time import sleep
 
 # In[2]: font 설정
 import matplotlib.font_manager as fm
@@ -310,22 +310,40 @@ class Wallet:
         self.restMoney = 0
         self.bondNum = 0
 
-    def lossCut(self, current, topdf, allIndex):
+    def goOneMonthAndlossCut(self, current, topdf, allIndex):
         nextDate = current + pd.Timedelta(1, unit='M')
         indexloc = topdf.index.get_loc(current, method='nearest')
         firstValue = topdf.iloc[indexloc][allIndex] 
-        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
+        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=allIndex)
+        restStockSellMoney = 0
+        cutlist=[]
         while nextDate > current:
-            beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
-            beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
-            
+            # beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
+            # beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
+            # self.moneyWallet = pd.concat([self.moneyWallet, beforeBuyMoney], sort=False)
             #하루지나감 어렵다
             current = topdf.index[indexloc+1]
+            dateIndex = self.stockWallet.index.get_loc(current, method='ffill')
+            # buyTargets = self.stockWallet.loc[:,self.stockWallet.iloc[dateIndex]>0].columns
             
-            stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex][(buyMoney/firstBuyMoney) >= 0.9]
-            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=self.stockWallet.columns)
-            beforeBuyMoney * buyMoney / beforeBuyMoney
-             
+            stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
+            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=allIndex)
+            returnRate = buyMoney/firstBuyMoney.values
+            returnRate = returnRate.dropna(axis=1, how='all')
+            returnRate = returnRate[returnRate <= 0.95]
+            returnRate = returnRate.dropna(axis=1, how='all')
+            print(returnRate)
+            sleep(3)
+            #cutlist를 returnRate있게 걸러야함
+            for col in returnRate.drop(cutlist, axis=1):
+                cutlist.append(col)
+                print('losscut',current, dateIndex,col)
+                self.restMoney += self.stockWallet.iloc[dateIndex][col] * stockValue[col]
+                restStockSellMoney += stockValue[col]
+            indexloc+=1
+        self.stockMoney = (self.stockWallet.drop(cutlist, axis=1).iloc[-1][stockValue.index] * stockValue.drop(cutlist, axis=0)).values.sum() + restStockSellMoney
+            # beforeBuyMoney * buyMoney / beforeBuyMoney
+        return current
 
     def goOneMonth(self, current, topdf, bonddf, allIndex):
         beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
@@ -399,7 +417,7 @@ while endDate > current:
     allIndex = list(set(allIndex))
     # print(allIndex)
 
-    current = wallet.goOneMonth(current, topdf, None, allIndex)
+    current = wallet.goOneMonthAndlossCut(current, topdf, allIndex)
 
     #구매
     # print(money)
