@@ -314,7 +314,8 @@ class Wallet:
         nextDate = current + pd.Timedelta(1, unit='M')
         indexloc = topdf.index.get_loc(current, method='nearest')
         firstValue = topdf.iloc[indexloc][allIndex] 
-        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=allIndex)
+        # print(self.stockWallet.iloc[-1])
+        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
         restStockSellMoney = 0
         cutlist=[]
         while nextDate > current:
@@ -327,21 +328,28 @@ class Wallet:
             # buyTargets = self.stockWallet.loc[:,self.stockWallet.iloc[dateIndex]>0].columns
             
             stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=allIndex)
+            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=self.stockWallet.columns)
             returnRate = buyMoney/firstBuyMoney.values
+            returnRate = returnRate[allIndex]
             returnRate = returnRate.dropna(axis=1, how='all')
             returnRate = returnRate[returnRate <= 0.95]
             returnRate = returnRate.dropna(axis=1, how='all')
-            print(returnRate)
-            sleep(3)
+            intersect = list(set(returnRate.columns) & set(cutlist))
+            returnRate = returnRate.drop(intersect, axis=1)
+            
             #cutlist를 returnRate있게 걸러야함
-            for col in returnRate.drop(cutlist, axis=1):
+            for col in returnRate.columns:
                 cutlist.append(col)
-                print('losscut',current, dateIndex,col)
+                # print('1',self.stockWallet.iloc[dateIndex])
+                # print('2',stockValue)
                 self.restMoney += self.stockWallet.iloc[dateIndex][col] * stockValue[col]
                 restStockSellMoney += stockValue[col]
             indexloc+=1
-        self.stockMoney = (self.stockWallet.drop(cutlist, axis=1).iloc[-1][stockValue.index] * stockValue.drop(cutlist, axis=0)).values.sum() + restStockSellMoney
+        print('losscut',current, len(cutlist), cutlist)
+        intersect = list(set(self.stockWallet.columns) & set(cutlist))
+        dropStockWallet = self.stockWallet.drop(intersect, axis=1)
+        dropStockValue = stockValue.drop(intersect, axis = 0)
+        self.stockMoney = (dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue).values.sum() + restStockSellMoney
             # beforeBuyMoney * buyMoney / beforeBuyMoney
         return current
 
@@ -368,14 +376,14 @@ rebalaceRate = 0
 current = startDate
 
 st = StockTransaction.create()
-bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
-foreignList = ['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
+bondList = []#Shares.toNameList(KODEX_bond+TIGER_bond)
+foreignList = []#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
 #domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 domesticList = list(topcap[str(current.year)]['Name'])
 
-bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
-foreignListNum = 5#int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
-domesticListNum = 150#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
+bondListNum = 0#3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
+foreignListNum = 0#5#int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
+domesticListNum = 200#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
 print(bondListNum, foreignListNum, domesticListNum)
 
