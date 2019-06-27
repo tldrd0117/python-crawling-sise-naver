@@ -40,7 +40,7 @@ print(font_name)
 mpl.rc('font', family=font_name) 
 
 # In[2]: date
-startDateStr = '2012-01-01'
+startDateStr = '2008-01-01'
 endDateStr = '2018-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
@@ -180,6 +180,8 @@ topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2005-12-31
 etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
 topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
 topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
+# topdf = topcapdf#pd.concat([etfdf,topcapdf], sort=False, axis=1)
+
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND_ETF'), KODEX_bond + TIGER_bond, beforeStr, endDateStr)
 #채권 종가
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND'),[{'code':'114260','name':'KODEX 국고채3년'}],beforeStr, endDateStr)
@@ -332,7 +334,7 @@ class Wallet:
             returnRate = buyMoney/firstBuyMoney.values
             returnRate = returnRate[allIndex]
             returnRate = returnRate.dropna(axis=1, how='all')
-            returnRate = returnRate[returnRate <= 0.95]
+            returnRate = returnRate[returnRate <= 0.97]
             returnRate = returnRate.dropna(axis=1, how='all')
             intersect = list(set(returnRate.columns) & set(cutlist))
             returnRate = returnRate.drop(intersect, axis=1)
@@ -349,8 +351,15 @@ class Wallet:
         intersect = list(set(self.stockWallet.columns) & set(cutlist))
         dropStockWallet = self.stockWallet.drop(intersect, axis=1)
         dropStockValue = stockValue.drop(intersect, axis = 0)
-        self.stockMoney = (dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue).values.sum() + restStockSellMoney
+
+        # print('dropStockWallet', dropStockWallet.iloc[-1][dropStockValue.index])
+        # print('dropStockValue', dropStockValue)
+        # print('restStockSellMoney', restStockSellMoney)
+        dropStockValue = dropStockValue.fillna(value=0.0)
+
+        self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum() + restStockSellMoney
             # beforeBuyMoney * buyMoney / beforeBuyMoney
+        
         return current
 
     def goOneMonth(self, current, topdf, bonddf, allIndex):
@@ -376,13 +385,13 @@ rebalaceRate = 0
 current = startDate
 
 st = StockTransaction.create()
-bondList = []#Shares.toNameList(KODEX_bond+TIGER_bond)
-foreignList = []#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
+bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
+foreignList = Shares.toNameList(KODEX_domestic+TIGER_domestic)#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
 #domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 domesticList = list(topcap[str(current.year)]['Name'])
 
-bondListNum = 0#3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
-foreignListNum = 0#5#int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
+bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
+foreignListNum = 5 #int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
 domesticListNum = 200#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
 print(bondListNum, foreignListNum, domesticListNum)
@@ -477,7 +486,9 @@ print(plt)
 
 
 
-
+#123400327.99999969 losscut0.95 domestic 200 cashrate 0.2 avgmomentum 6 momentumlimit0.25 limit12 연평균 22%
+#123400327.99999969보다 높음 losscut0.97 domestic 200 cashrate 0.2 avgmomentum 6 momentumlimit0.25 limit12 연평균 25%
+#123400327.99999969보다 높음 losscut0.97 domestic 200 cashrate 0.2 avgmomentum 6 momentumlimit0.25 limit12 연평균 25%
 
 
 
