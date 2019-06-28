@@ -164,6 +164,14 @@ TIGER_bond = sl.chooseCodeName(bondWords, TIGER)
 TIGER_foreign = sl.chooseCodeName(foreignWords, TIGER)
 TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords, TIGER)
 
+#KOSEF 종목 (키움)
+KOSEF = sl.loadSearchCodeName('KOSEF')
+KOSEF = sl.exceptCodeName(blackWords, KOSEF)
+KOSEF_bond = sl.chooseCodeName(bondWords, KOSEF)
+KOSEF_foreign = sl.chooseCodeName(foreignWords, KOSEF)
+KOSEF_domestic = sl.exceptCodeName(bondWords + foreignWords, KOSEF)
+
+
 
 # In[24]: load
 
@@ -175,7 +183,7 @@ targetShares = {}
 for index, row  in topcap.iterrows():
     targetShares[row['Code']] = row['Name']
 #종목별 종가
-etfdf = sl.loadStockFromArr(sl.makeName('ETF', endDateStr='2019-12-31'), KODEX + TIGER, beforeStr, '2019-12-31')
+etfdf = sl.loadStockFromArr(sl.makeName('ETF2', endDateStr='2019-12-31'), KODEX + TIGER + KOSEF, beforeStr, '2019-12-31')
 topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2005-12-31', endDateStr='2019-12-31'), targetShares, '2005-12-31', '2019-12-31')
 etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
 topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
@@ -320,12 +328,16 @@ class Wallet:
         firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
         restStockSellMoney = 0
         cutlist=[]
+        indexloc+=1
         while nextDate > current:
             # beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
             # beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
             # self.moneyWallet = pd.concat([self.moneyWallet, beforeBuyMoney], sort=False)
             #하루지나감 어렵다
-            current = topdf.index[indexloc+1]
+            current = topdf.index[indexloc]
+            if nextDate <= current:
+                current = topdf.index[indexloc - 1]
+                break
             dateIndex = self.stockWallet.index.get_loc(current, method='ffill')
             # buyTargets = self.stockWallet.loc[:,self.stockWallet.iloc[dateIndex]>0].columns
             
@@ -366,7 +378,6 @@ class Wallet:
         beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
         buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
         
-        
         # self.moneyWallet = pd.concat([self.moneyWallet, buyMoney], sort=False)
 
         current = current + pd.Timedelta(1, unit='M')
@@ -378,15 +389,16 @@ class Wallet:
         return current
         
 #투자금
-money = 10000000
+firstMoney = 10000000
+money = firstMoney
 #현금비율
 rebalaceRate = 0
 
 current = startDate
 
 st = StockTransaction.create()
-bondList = Shares.toNameList(KODEX_bond+TIGER_bond)
-foreignList = Shares.toNameList(KODEX_domestic+TIGER_domestic)#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
+bondList = Shares.toNameList(KODEX_bond+TIGER_bond+KOSEF_bond)
+foreignList = Shares.toNameList(KODEX_domestic+TIGER_domestic+KOSEF_domestic)#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
 #domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 domesticList = list(topcap[str(current.year)]['Name'])
 
@@ -458,17 +470,23 @@ while endDate > current:
 # print('##주식가격', wallet.moneyWallet)
 print('##Total', moneySum)
 
+# In[7] 정리
+# moneySum = moneySum[:-1]
+moneySum
+
 # In[6]: 통계
 moneySum.index = moneySum.index.map(lambda dt: pd.to_datetime(dt.date()))
-
-portfolio = moneySum['total'] / moneySum['total'].iloc[0]
+print(moneySum['total'].iloc[0])
+portfolio = moneySum['total'] / firstMoney
 투자기간 = len(moneySum.index)/12
 print(투자기간)
 # print(portfolio)
-print('연평균 수익률',(portfolio[-2]**(1/투자기간)*100-100))
+print('연평균 수익률',((portfolio[-1]**(1/투자기간))*100-100))
 
-print('최대 하락률',((portfolio.shift(1) - portfolio)*100).min())
-print('최대 상승률',((portfolio.shift(1) - portfolio)*100).max())
+print('최대 하락률',((portfolio - portfolio.shift(1))/portfolio.shift(1)*100).min())
+print('최대 상승률',((portfolio - portfolio.shift(1))/portfolio.shift(1)*100).max())
+# (portfolio.shift(1) - portfolio)
+# (portfolio - portfolio.shift(1))/portfolio.shift(1)*100
 
 # In[7]: 그래프
 # In[15]: 그래프 그리기
@@ -477,7 +495,7 @@ choosedDf['KOSPI'] = kospidf['종가']
 # choosedDf[bonddf.columns[0]] = bonddf[bonddf.columns[0]]
 choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
 # print(choosedDf)
-jisuDf = choosedDf / choosedDf.iloc[0]
+jisuDf = choosedDf / firstMoney
 print(jisuDf)
 plt = jisuDf.plot(figsize = (18,12), fontsize=12)
 fontProp = fm.FontProperties(fname=path, size=18)
