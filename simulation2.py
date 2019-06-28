@@ -168,7 +168,7 @@ TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords, TIGER)
 # In[24]: load
 
 #시가총액순 종목
-topcap = sl.load(sl.makeName('TOPCAP', '2005-12-31', '2019-12-31'))
+topcap = sl.load(sl.makeName('TOPCAP', '2007-01-01', '2019-12-31'))
 
 #시가
 targetShares = {}
@@ -176,7 +176,7 @@ for index, row  in topcap.iterrows():
     targetShares[row['Code']] = row['Name']
 #종목별 종가
 etfdf = sl.loadStockFromArr(sl.makeName('ETF', endDateStr='2019-12-31'), KODEX + TIGER, beforeStr, '2019-12-31')
-topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2005-12-31', endDateStr='2019-12-31'), targetShares, '2005-12-31', '2019-12-31')
+topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2006-01-01', endDateStr='2019-12-31'), targetShares, '2005-12-31', '2019-12-31')
 etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
 topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
 topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
