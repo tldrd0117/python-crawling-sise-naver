@@ -253,7 +253,7 @@ class StockTransaction:
         share = momentumScoreMean#[list(sortValue.tail(shareNum).index)]
         distMoney = share / (share + cashRate)
         distMoney = distMoney[share > mementumLimit]
-        distMoney = distMoney.head(shareNum)
+        distMoney = distMoney[sortValue.head(shareNum).index]
         sumMoney = distMoney.sum()
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / distMoney.size if distMoney.size != 0 else 0}
 
@@ -433,9 +433,10 @@ class Wallet:
             buyMoney = buyMoney[buyMoney > 0]
             
             returnRate = buyMoney/firstBuyMoney
-            returnRate = returnRate[allIndex]
+            intersect = list(set(returnRate.index) & set(allIndex))
+            returnRate = returnRate[intersect]
             returnRate = returnRate.dropna(axis=0, how='all')
-            returnRate = returnRate[returnRate <= 0.90]
+            returnRate = returnRate[returnRate <= 0.97]
             returnRate = returnRate.dropna(axis=0, how='all')
             intersect = list(set(returnRate.index) & set(cutlist))
             returnRate = returnRate.drop(intersect, axis=0)
@@ -504,30 +505,30 @@ domesticList = list(topcap[str(current.year)]['Name'])
 wallet = Wallet()
 moneySum = pd.DataFrame()
 
-bondETF = Shares('채권', shareNum=3, moneyRate=1, shareList=bondETFList)
+bondETF = Shares('채권', shareNum=3, moneyRate=0.25, shareList=bondETFList)
 foreignETF = Shares('외국 ETF', shareNum=5, moneyRate=1, shareList=foreignETFList)
 # inverseETF = Shares('인버스 ETF', shareNum=5, moneyRate=1, shareList=inverseETFList)
-# domesticETF = Shares('국내 ETF', shareNum=5, moneyRate=1, shareList=domesticETFList)
-domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
+domesticETF = Shares('국내 ETF', shareNum=10, moneyRate=1, shareList=domesticETFList)
+# domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
 
-bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0))
-foreignETF.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
+bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=12, mUnit='M', mementumLimit=0))
+foreignETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
 # inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=False))
-# domesticETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
-domestic.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
+domesticETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
+# domestic.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
 
 
 # foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
 # domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
 
 ag = AssetGroup(st)
-ag.addShares([bondETF, foreignETF, domestic])
+ag.addShares([bondETF, foreignETF, domesticETF])
 # ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
     print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
     print('simulate...', current)
-    domestic.shareList = list(topcap[str(current.year)]['Name'])
+    # domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
     wallet.restMoney = money * rebalaceRate
     stockRestMoney = 0
