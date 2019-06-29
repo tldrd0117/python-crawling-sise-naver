@@ -143,34 +143,45 @@ class StockLoader:
         return targetList
 
 sl = StockLoader.create()
+# In[22]: getETF
+KODEX = sl.loadSearchCodeName('KODEX')
+TIGER = sl.loadSearchCodeName('TIGER')
+KOSEF = sl.loadSearchCodeName('KOSEF')
 
 
-# In[23]: ETF
+# In[23]: ETF 분할
 #KODEX 종목 (삼성자산운용)
 blackWords = ['액티브', '삼성']
 bondWords = [' 국고채', ' 국채']
 foreignWords = ['미국', '대만', '중국', '심천', '선진국', '일본', 'China', '글로벌', '차이나', '라틴', '유로', '인도', '하이일드']
-KODEX = sl.loadSearchCodeName('KODEX')
+inverseWords = ['인버스']
+productWords = ['원유', '골드선물', '금선물', '은선물', '달러선물', '농산물', '금속선물', '금은선물', '엔선물', '구리선물', '구리실물', '콩선물']
 KODEX = sl.exceptCodeName(blackWords, KODEX)
 KODEX_bond = sl.chooseCodeName(bondWords, KODEX)
 KODEX_foreign = sl.chooseCodeName(foreignWords, KODEX)
-KODEX_domestic = sl.exceptCodeName(bondWords + foreignWords, KODEX)
+KODEX_domestic = sl.exceptCodeName(bondWords + foreignWords + inverseWords + productWords, KODEX)
+KODEX_exceptProduct = sl.exceptCodeName(productWords + foreignWords, KODEX)
+KODEX_inverse = sl.chooseCodeName(inverseWords, KODEX_exceptProduct)
+KODEX_product = sl.chooseCodeName(productWords, KODEX)
 
 
 #TIGER 종목 (미래에셋대우)
-TIGER = sl.loadSearchCodeName('TIGER')
 TIGER = sl.exceptCodeName(blackWords, TIGER)
 TIGER_bond = sl.chooseCodeName(bondWords, TIGER)
 TIGER_foreign = sl.chooseCodeName(foreignWords, TIGER)
-TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords, TIGER)
+TIGER_domestic = sl.exceptCodeName(bondWords + foreignWords + inverseWords + productWords, TIGER)
+TIGER_exceptProduct = sl.exceptCodeName(productWords + foreignWords, TIGER)
+TIGER_inverse = sl.chooseCodeName(inverseWords, TIGER)
+TIGER_product = sl.chooseCodeName(inverseWords, TIGER)
 
 #KOSEF 종목 (키움)
-KOSEF = sl.loadSearchCodeName('KOSEF')
 KOSEF = sl.exceptCodeName(blackWords, KOSEF)
 KOSEF_bond = sl.chooseCodeName(bondWords, KOSEF)
 KOSEF_foreign = sl.chooseCodeName(foreignWords, KOSEF)
-KOSEF_domestic = sl.exceptCodeName(bondWords + foreignWords, KOSEF)
-
+KOSEF_domestic = sl.exceptCodeName(bondWords + foreignWords + inverseWords + productWords, KOSEF)
+KOSEF_exceptProduct = sl.exceptCodeName(productWords + foreignWords, KOSEF)
+KOSEF_inverse = sl.chooseCodeName(inverseWords, KOSEF_exceptProduct)
+KOSEF_product = sl.chooseCodeName(productWords, KOSEF)
 
 
 # In[24]: load
@@ -239,17 +250,19 @@ class StockTransaction:
         sortValue = sortValue.dropna()
         # print(1,sortValue.head(shareNum).index)
         # print(2,momentumScoreMean)
-        share = momentumScoreMean[list(sortValue.head(shareNum).index)]
+        share = momentumScoreMean#[list(sortValue.tail(shareNum).index)]
         distMoney = share / (share + cashRate)
         distMoney = distMoney[share > mementumLimit]
+        distMoney = distMoney.tail(shareNum)
         sumMoney = distMoney.sum()
-        return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / share.size if share.size != 0 else 0}
+        return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / distMoney.size if distMoney.size != 0 else 0}
 
     def setMonmentumRate(self, shares, current, topdf, cashRate, mNum, mUnit, mementumLimit, limit12 = False):
         momentumdf = topdf if not limit12 else self.get12MomentumMean(current, topdf)
         # print('momentum:',len(list(momentumdf.columns)))
         momentumMean, momentumScoreMean = self.getMomentumMean(current, momentumdf, mNum=mNum, mUnit=mUnit)
-        rate = self.getMomentumInvestRate(momentumMean[shares.shareList], momentumScoreMean[shares.shareList], shareNum=shares.shareNum, cashRate=cashRate, mementumLimit=mementumLimit)
+        intersect = list(set(momentumMean.index) & set(shares.shareList))
+        rate = self.getMomentumInvestRate(momentumMean[intersect], momentumScoreMean[intersect], shareNum=shares.shareNum, cashRate=cashRate, mementumLimit=mementumLimit)
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
 
@@ -279,7 +292,7 @@ class StockTransaction:
                 rMoney -= sValue
         wallet.stockWallet = stockWallet
         shares.restMoney += money
-        print('투자리스트')
+        print('투자리스트:',shares.name)
         print('=================================================')
         print('investNum', len(rateMoney.index), '투자금 합계: ',rateMoney.sum() - money)
         print(list(rateMoney.index))
@@ -307,11 +320,68 @@ class Shares:
     def calculateInvestMoney(self, sumMoneyRate, stockMoney):
         self.investMoney = self.moneyRate/sumMoneyRate * stockMoney * self.perMoneyRate
         self.restMoney = self.moneyRate/sumMoneyRate * stockMoney * (1 - self.perMoneyRate)
-    
+    def setMomentum(self, momentum):
+        self.momentum = momentum
+
     @staticmethod
     def toNameList(dictList):
         return list(set([ dic['Name'] for dic in dictList ]))
 
+class MomentumStrategy:
+    def __init__(self, cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=False):
+        self.cashRate = cashRate
+        self.mNum = mNum
+        self.mUnit = mUnit
+        self.mementumLimit = mementumLimit
+        self.limit12 = limit12
+# class LosscutStrategy:
+    # def __init__(self, losscut=0):
+        # self.losscut = losscut
+
+class AssetGroup:
+    def __init__(self, stockTransaction):
+        self.assetGroup = []
+        self.st = stockTransaction
+    def addShares(self, shares):
+        if type(shares) is list:
+            for share in shares:
+                self.assetGroup.append(share)
+        else:
+            self.assetGroup.append(shares)
+    def calculateAllInvestMoney(self,wallet):
+        if len(self.assetGroup) <= 0:
+            print('투자리스트가 없습니다')
+        # vals = [shares.moneyRate for shares in self.assetGroup]
+        sumMoneyRate = sum(shares.moneyRate for shares in self.assetGroup)
+        # sumMoneyRate = reduce(lambda sumVal, newVal: sumVal+newVal.moneyRate, vals)
+        for shares in self.assetGroup:
+            shares.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
+    def buyAll(self, wallet, current, topdf):
+        for shares in self.assetGroup:
+            self.st.buy(shares, wallet, current, topdf)
+    def getRestMoney(self, wallet):
+        return sum(shares.restMoney for shares in self.assetGroup) + wallet.restMoney
+        # return reduce(lambda sumVal, newVal: sumVal + newVal.restMoney, self.assetGroup) + wallet.restMoney
+    def getInvestTargets(self):
+        sumTargets = []
+        for shares in self.assetGroup:
+            sumTargets += list(shares.investRate.index)
+        return list(set(sumTargets))
+    def setMomentumRate(self, current, topdf):
+        for shares in self.assetGroup:
+            momentum = shares.momentum
+            if momentum:
+                self.st.setMonmentumRate(shares, current, topdf, cashRate=momentum.cashRate, mNum=momentum.mNum, mUnit=momentum.mUnit, mementumLimit=momentum.mementumLimit, limit12=momentum.limit12)
+    def recordBeforeHold(self, buydf):
+        for shares in self.assetGroup:
+            shares.stockHoldMoney = buydf[shares.investRate.index].sum(axis=1).sum()
+            # print('record',shares.stockHoldMoney)
+    def calYield(self, buydf):
+        for shares in self.assetGroup:
+            shares.yie = buydf[shares.investRate.index].sum()/shares.stockHoldMoney
+            if shares.yie == np.nan:
+                shares.yie = 0.0
+            print(shares.name,':',shares.yie)
 class Wallet:
     def __init__(self):
         self.stockWallet = pd.DataFrame()
@@ -320,20 +390,27 @@ class Wallet:
         self.restMoney = 0
         self.bondNum = 0
 
-    def goOneMonthAndlossCut(self, current, topdf, allIndex):
+    def goOneMonthAndlossCut(self, current, topdf, allIndex, ag):
         nextDate = current + pd.Timedelta(1, unit='M')
         indexloc = topdf.index.get_loc(current, method='nearest')
         firstValue = topdf.iloc[indexloc][allIndex] 
         # print(self.stockWallet.iloc[-1])
         firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
+        ag.recordBeforeHold(firstBuyMoney)
         restStockSellMoney = 0
         cutlist=[]
         indexloc+=1
+        dfSize = len(topdf.index)
+        breaker = False
         while nextDate > current:
             # beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
             # beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
             # self.moneyWallet = pd.concat([self.moneyWallet, beforeBuyMoney], sort=False)
             #하루지나감 어렵다
+            if dfSize -1 <= indexloc:
+                print('sizeFull')
+                breaker = True
+                break
             current = topdf.index[indexloc]
             if nextDate <= current:
                 current = topdf.index[indexloc - 1]
@@ -368,11 +445,11 @@ class Wallet:
         # print('dropStockValue', dropStockValue)
         # print('restStockSellMoney', restStockSellMoney)
         dropStockValue = dropStockValue.fillna(value=0.0)
-
+        ag.calYield( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue )
         self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum() + restStockSellMoney
             # beforeBuyMoney * buyMoney / beforeBuyMoney
         
-        return current
+        return current, breaker
 
     def goOneMonth(self, current, topdf, bonddf, allIndex):
         beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
@@ -397,26 +474,43 @@ rebalaceRate = 0
 current = startDate
 
 st = StockTransaction.create()
-bondList = Shares.toNameList(KODEX_bond+TIGER_bond+KOSEF_bond)
-foreignList = Shares.toNameList(KODEX_domestic+TIGER_domestic+KOSEF_domestic)#['TIGER 미국S&P500레버리지(합성 H)','KODEX China H 레버리지(H)','TIGER 유로스탁스레버리지(합성 H)','KODEX 일본TOPIX100','TIGER 인도니프티50레버리지(합성)']#Shares.toNameList(KODEX_foreign+TIGER_foreign)
+bondETFList = Shares.toNameList(KODEX_bond+TIGER_bond+KOSEF_bond)
+foreignETFList = Shares.toNameList(KODEX_foreign+TIGER_foreign+KOSEF_foreign)
+inverseETFList = Shares.toNameList(KODEX_inverse+TIGER_inverse+KOSEF_inverse)
+domesticETFList = Shares.toNameList(KODEX_domestic+TIGER_domestic+KOSEF_domestic)
 #domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 domesticList = list(topcap[str(current.year)]['Name'])
 
-bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
-foreignListNum = 5 #int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
-domesticListNum = 200#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
+# bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
+# foreignListNum = 5 #int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
+# domesticListNum = 100#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
 
-print(bondListNum, foreignListNum, domesticListNum)
+# print(bondETFNum, foreignETFNum, inverseETFNum,domesticETFNum,domesticNum)
 
 wallet = Wallet()
 moneySum = pd.DataFrame()
 
-bond = Shares('bond', shareNum=bondListNum, moneyRate=1, shareList=bondList)
-foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
-domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
+bondETF = Shares('bondETFList', shareNum=3, moneyRate=1, shareList=bondETFList)
+foreignETF = Shares('foreignETFList', shareNum=5, moneyRate=1, shareList=foreignETFList)
+inverseETF = Shares('inverseETFList', shareNum=5, moneyRate=1, shareList=inverseETFList)
+domesticETF = Shares('domesticETFList', shareNum=5, moneyRate=1, shareList=domesticETFList)
+domestic = Shares('domesticList', shareNum=50, moneyRate=1, shareList=domesticList)
 
+bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0))
+foreignETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
+inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
+domesticETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
+domestic.setMomentum(MomentumStrategy(cashRate=0.2, mNum=3, mUnit='M', mementumLimit=0.5, limit12=True))
+
+
+# foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
+# domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
+
+ag = AssetGroup(st)
+ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
+    print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
     print('simulate...', current)
     domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
@@ -424,29 +518,14 @@ while endDate > current:
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    st.setMonmentumRate(bond, current, topdf, cashRate=0, mNum=6, mUnit='M', mementumLimit=0)
-    st.setMonmentumRate(foreign, current, topdf, cashRate=0.2, mNum=6, mUnit='M', mementumLimit=0, limit12=False)
-    st.setMonmentumRate(domestic, current, topdf, cashRate=0.2, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True)
+    ag.setMomentumRate(current, topdf)
     #TARGET
-    sumMoneyRate = bond.moneyRate + foreign.moneyRate + domestic.moneyRate
-    bond.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
-    foreign.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
-    domestic.calculateInvestMoney(sumMoneyRate, wallet.stockMoney)
-
-    st.buy(bond, wallet, current, topdf)
-    st.buy(foreign, wallet, current, topdf)
-    st.buy(domestic, wallet, current, topdf)
-
+    ag.calculateAllInvestMoney(wallet)
+    ag.buyAll(wallet, current, topdf)
+    wallet.restMoney = ag.getRestMoney(wallet)
     #사고남은돈 + 지갑에 남은돈
-    sumRestMoney = bond.restMoney + foreign.restMoney + domestic.restMoney + wallet.restMoney
-    wallet.restMoney = sumRestMoney
-    # st.restInvestBuy(current, bonddf, sumRestMoney, wallet)
-
-    allIndex = list(bond.investRate.index) + list(foreign.investRate.index) + list(domestic.investRate.index)
-    allIndex = list(set(allIndex))
-    # print(allIndex)
-
-    current = wallet.goOneMonthAndlossCut(current, topdf, allIndex)
+    allIndex = ag.getInvestTargets()
+    current, breaker = wallet.goOneMonthAndlossCut(current, topdf, allIndex, ag)
 
     #구매
     # print(money)
@@ -464,6 +543,8 @@ while endDate > current:
     print('=================================================')
     print('total', money, wallet.stockMoney, wallet.restMoney)
     print('=================================================')
+    if breaker:
+        break
 
 
 # print('##소유주식', wallet.stockWallet)
@@ -495,7 +576,7 @@ choosedDf['KOSPI'] = kospidf['종가']
 # choosedDf[bonddf.columns[0]] = bonddf[bonddf.columns[0]]
 choosedDf = choosedDf.fillna(method='bfill').fillna(method='ffill')
 # print(choosedDf)
-jisuDf = choosedDf / firstMoney
+jisuDf = choosedDf / choosedDf.iloc[0]
 print(jisuDf)
 plt = jisuDf.plot(figsize = (18,12), fontsize=12)
 fontProp = fm.FontProperties(fname=path, size=18)
