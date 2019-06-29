@@ -253,7 +253,7 @@ class StockTransaction:
         share = momentumScoreMean#[list(sortValue.tail(shareNum).index)]
         distMoney = share / (share + cashRate)
         distMoney = distMoney[share > mementumLimit]
-        distMoney = distMoney.tail(shareNum)
+        distMoney = distMoney.head(shareNum)
         sumMoney = distMoney.sum()
         return {'invest':distMoney / sumMoney, 'perMoney':sumMoney / distMoney.size if distMoney.size != 0 else 0}
 
@@ -374,12 +374,20 @@ class AssetGroup:
                 self.st.setMonmentumRate(shares, current, topdf, cashRate=momentum.cashRate, mNum=momentum.mNum, mUnit=momentum.mUnit, mementumLimit=momentum.mementumLimit, limit12=momentum.limit12)
     def recordBeforeHold(self, buydf):
         for shares in self.assetGroup:
-            shares.stockHoldMoney = buydf[shares.investRate.index].sum(axis=1).sum()
-            # print('record',shares.stockHoldMoney)
-    def calYield(self, buydf):
+            shares.stockHoldMoney = buydf[shares.investRate.index].dropna(axis=0, how='all')
+            shares.stockHoldMoney = shares.stockHoldMoney[shares.stockHoldMoney > 0]
+            # shares.stockHoldMoney = shares.stockHoldMoney[shares.stockHoldMoney>0]
+    def calYield(self, buydf, cutlist):
         for shares in self.assetGroup:
-            shares.yie = buydf[shares.investRate.index].sum()/shares.stockHoldMoney
-            if shares.yie == np.nan:
+            target = buydf[shares.investRate.index].dropna(axis=0, how='all')
+            target = target[target > 0]
+            # print(buydf[shares.investRate.index].sum())
+            intersect = list(set(shares.stockHoldMoney.index) & set(cutlist))
+            stockHoldMoney = shares.stockHoldMoney.drop(intersect, axis=0)
+            print(stockHoldMoney.sum())
+            print(target.sum())
+            shares.yie = target.sum() / stockHoldMoney.sum()
+            if np.isnan(shares.yie):
                 shares.yie = 0.0
             print(shares.name,':',shares.yie)
 class Wallet:
@@ -395,9 +403,10 @@ class Wallet:
         indexloc = topdf.index.get_loc(current, method='nearest')
         firstValue = topdf.iloc[indexloc][allIndex] 
         # print(self.stockWallet.iloc[-1])
-        firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
+        firstBuyMoney = (self.stockWallet.iloc[-1] * firstValue).dropna(axis=0, how='all')
+        firstBuyMoney = firstBuyMoney[firstBuyMoney > 0]
+        # firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
         ag.recordBeforeHold(firstBuyMoney)
-        restStockSellMoney = 0
         cutlist=[]
         indexloc+=1
         dfSize = len(topdf.index)
@@ -419,22 +428,27 @@ class Wallet:
             # buyTargets = self.stockWallet.loc[:,self.stockWallet.iloc[dateIndex]>0].columns
             
             stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-            buyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * stockValue).values], index=[current], columns=self.stockWallet.columns)
-            returnRate = buyMoney/firstBuyMoney.values
+            
+            buyMoney = (self.stockWallet.iloc[-1] * stockValue).dropna(axis=0, how='all')
+            buyMoney = buyMoney[buyMoney > 0]
+            
+            returnRate = buyMoney/firstBuyMoney
             returnRate = returnRate[allIndex]
-            returnRate = returnRate.dropna(axis=1, how='all')
-            returnRate = returnRate[returnRate <= 0.97]
-            returnRate = returnRate.dropna(axis=1, how='all')
-            intersect = list(set(returnRate.columns) & set(cutlist))
-            returnRate = returnRate.drop(intersect, axis=1)
+            returnRate = returnRate.dropna(axis=0, how='all')
+            returnRate = returnRate[returnRate <= 0.90]
+            returnRate = returnRate.dropna(axis=0, how='all')
+            intersect = list(set(returnRate.index) & set(cutlist))
+            returnRate = returnRate.drop(intersect, axis=0)
             
             #cutlist를 returnRate있게 걸러야함
-            for col in returnRate.columns:
+            for col in returnRate.index:
+                if col in cutlist:
+                    continue
                 cutlist.append(col)
                 # print('1',self.stockWallet.iloc[dateIndex])
                 # print('2',stockValue)
                 self.restMoney += self.stockWallet.iloc[dateIndex][col] * stockValue[col]
-                restStockSellMoney += stockValue[col]
+                # restStockSellMoney += stockValue[col]
             indexloc+=1
         print('losscut',current, len(cutlist), cutlist)
         intersect = list(set(self.stockWallet.columns) & set(cutlist))
@@ -445,8 +459,8 @@ class Wallet:
         # print('dropStockValue', dropStockValue)
         # print('restStockSellMoney', restStockSellMoney)
         dropStockValue = dropStockValue.fillna(value=0.0)
-        ag.calYield( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue )
-        self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum() + restStockSellMoney
+        ag.calYield( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue, cutlist )
+        self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum()
             # beforeBuyMoney * buyMoney / beforeBuyMoney
         
         return current, breaker
@@ -490,24 +504,25 @@ domesticList = list(topcap[str(current.year)]['Name'])
 wallet = Wallet()
 moneySum = pd.DataFrame()
 
-bondETF = Shares('bondETFList', shareNum=3, moneyRate=1, shareList=bondETFList)
-foreignETF = Shares('foreignETFList', shareNum=5, moneyRate=1, shareList=foreignETFList)
-inverseETF = Shares('inverseETFList', shareNum=5, moneyRate=1, shareList=inverseETFList)
-domesticETF = Shares('domesticETFList', shareNum=5, moneyRate=1, shareList=domesticETFList)
-domestic = Shares('domesticList', shareNum=50, moneyRate=1, shareList=domesticList)
+bondETF = Shares('채권', shareNum=3, moneyRate=1, shareList=bondETFList)
+foreignETF = Shares('외국 ETF', shareNum=5, moneyRate=1, shareList=foreignETFList)
+# inverseETF = Shares('인버스 ETF', shareNum=5, moneyRate=1, shareList=inverseETFList)
+# domesticETF = Shares('국내 ETF', shareNum=5, moneyRate=1, shareList=domesticETFList)
+domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
 
 bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0))
-foreignETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
-inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
-domesticETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
-domestic.setMomentum(MomentumStrategy(cashRate=0.2, mNum=3, mUnit='M', mementumLimit=0.5, limit12=True))
+foreignETF.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
+# inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=False))
+# domesticETF.setMomentum(MomentumStrategy(cashRate=1, mNum=3, mUnit='M', mementumLimit=0.25, limit12=True))
+domestic.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
 
 
 # foreign = Shares('foreign', shareNum=foreignListNum, moneyRate=1, shareList=foreignList)
 # domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
 
 ag = AssetGroup(st)
-ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
+ag.addShares([bondETF, foreignETF, domestic])
+# ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
     print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
