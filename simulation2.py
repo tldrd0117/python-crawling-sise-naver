@@ -141,6 +141,10 @@ class StockLoader:
                 targetList.append({'Name':target['Name'], 'Code':target['Code']})
 
         return targetList
+    def loadDartData(self, targets):
+        for target in targets:
+            dartCrawler = DartCrawler.create(target, '2007-01-01', '2019-12-31')
+            data = dartCrawler.crawling()
 
 sl = StockLoader.create()
 # In[22]: getETF
@@ -208,6 +212,10 @@ kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI', '2005-12-31', '2019-12-31'),
 
 # topdf
 # topcapdf.loc['2012-01-01':endDateStr]
+
+# In[22]: 재무제표
+
+
 
 # In[5]: look
 # kospidf

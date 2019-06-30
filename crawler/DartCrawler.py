@@ -30,16 +30,20 @@ class DartCrawler:
         text = r.data.decode('utf-8')
         return json.loads(text)
     
-    def getRcpNo(self, jsonData):
-        return list(map(lambda x : x['rcp_no'],jsonData['list']))
-    
+    def getInfo(self, jsonData):
+        return list(map(lambda x : (x['rcp_no'], self.getInBracket(x['rpt_nm'])),jsonData['list']))
+
     def viewerUrl(self, rcpNo):
         return 'http://dart.fss.or.kr/dsaf001/main.do?rcpNo=%s' % (rcpNo)
     def getViewerParam(self, rcpNo, menuName):
         viewerUrl = self.viewerUrl(rcpNo)
         r = http.request('GET', viewerUrl, timeout=10, retries=10)
         text = r.data.decode('utf-8')
-        targetIndex = text.find(menuName)
+        for menu in menuName:
+            targetIndex = text.find(menu)
+            if targetIndex != -1:
+                break
+
         startIndex = text.find('viewDoc', targetIndex)
         endIndex = text.find(';', startIndex)
         values = self.getInSingleQuote(text[startIndex:endIndex])
@@ -53,11 +57,22 @@ class DartCrawler:
             values.append(text[startIndex + 1:endIndex])
             startIndex = text.find('\'', endIndex + 1)
         return values
+    def getInBracket(self, text):
+        startIndex = text.find('(')
+        values = []
+        while startIndex >=0:
+            endIndex = text.find(')', startIndex + 1)
+            values.append(text[startIndex + 1:endIndex])
+            startIndex = text.find('(', endIndex + 1)
+        return values
 
     def viewerDetailUrl(self, params):
         return 'http://dart.fss.or.kr/report/viewer.do?rcpNo=%s&dcmNo=%s&eleId=%s&offset=%s&length=%s&dtd=%s' % (params[0], params[1], params[2], params[3], params[4], params[5])
 
     def getViewerHTML(self,params):
+        print(params)
+        if len(params) < 6:
+            return None
         viewerDetailUrl = self.viewerDetailUrl(params)
         r = http.request('GET', viewerDetailUrl, timeout=10, retries=10)
         text = r.data.decode('utf-8')
@@ -66,50 +81,72 @@ class DartCrawler:
     def crawling(self):
         jsonData = self.getJsonData(1)
         totalPageNo = jsonData['total_page']
-        rcpNo = []
-        rcpNo += self.getRcpNo(jsonData)
+        infoList = []
+        infoList += self.getInfo(jsonData)
         if int(totalPageNo) >= 2:
             for pno in range(2, int(totalPageNo) + 1):
                 jsonData = self.getJsonData(pno)
-                rcpNo += self.getRcpNo(jsonData)
-        html = self.getViewerHTML(self.getViewerParam(rcpNo[0], '주식의 총수'))
-        stockNum = self.getStockNum(html)
-        html = self.getViewerHTML(self.getViewerParam(rcpNo[0], '요약재무정보'))
-        total, profit = self.getTotal(html)
-        return {'stockNum':stockNum, 'total':total, 'profit':profit}
+                infoList += self.getInfo(jsonData)
+        results = []
+        for rcpNo, rptNm in infoList:
+            stockNum = ''
+            total=''
+            profit=''
+            html = self.getViewerHTML(self.getViewerParam(rcpNo, ['주식의 총수']))
+            if html:
+                stockNum = self.getStockNum(html)
+            html = self.getViewerHTML(self.getViewerParam(rcpNo, ['요약재무정보', '재무에 관한 사항']))
+            if html:
+                total, profit = self.getTotal(html)
+            results.append({'date':rptNm[0],'stockNum':stockNum, 'total':total, 'profit':profit})
+        return results
         # htmlFile = open('finhtml/'+self.name+'_'+rcpNo[0]+'.html', 'w')
         # htmlFile.write(str(html))
         # htmlFile.close()
     def getStockNum(self, html):
+        if html.find('table') == -1 and html.find('TABLE') == -1:
+            return None
         dfs = pd.read_html(html)
-        df = dfs[1]
-        index = df['구 분'][df['구 분']=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].dropna().index[0]
-        stockNum = df.iloc[index]['주식의 종류']['합계']
+        stockNum = None
+        for df in dfs:
+            if ('구 분', '구 분') in list(df.columns):
+                index = df[('구 분', '구 분')][df[('구 분', '구 분')]=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].index
+                stockNum = df.iloc[index[0]]['주식의 종류']['합계']
         return stockNum
     def getTotal(self, html):
         dfs = pd.read_html(html)
         total = None
         profit = None
-        for df in dfs:  
-            if '구 분' in list(df.columns):
-                index1 = df['구 분'][df['구 분']=='자본총계'].index
-                if len(index1) == 0:
-                    continue
-                index2 = df['구 분'][df['구 분']=='당기순이익'].index
-                if len(index2) == 0:
-                    index2 = df['구 분'][df['구 분']=='당기순이익(손실)'].index
-                    if len(index2) == 0:
+        filters = ['구 분', ('구 분', '구 분')]
+        for df in dfs:
+            for filterVal in filters:
+                if filterVal in list(df.columns):
+                    index1 = df[filterVal][df[filterVal]=='자본총계'].index
+                    if len(index1) == 0:
                         continue
-                total = df.iloc[index1[0]].iloc[1]
-                profit = df.iloc[index2[0]].iloc[1]
-                break
+                    index2 = df[filterVal][df[filterVal]=='당기순이익'].index
+                    if len(index2) == 0:
+                        index2 = df[filterVal][df[filterVal]=='당기순이익(손실)'].index
+                        if len(index2) == 0:
+                            continue
+                    # print(df)
+                    total = df.iloc[index1[0]].iloc[1]
+                    profit = df.iloc[index2[0]].iloc[1]
+                    break
+                if filterVal in list(df.values)[0]:
+                    for value in df.values:
+                        if value[0] == '자본총계':
+                            total = value[1]
+                        if value[0] == '당기순이익' or value[0] == '당기순이익(손실)':
+                            profit = value[1]
+            
         return total, profit
 
 
 
 # if __name__ == "__main__":
     # 현대중공업지주267250
-dartCrawler = DartCrawler.create({'name':'현대중공업지주','code':'267250'}, '2007-01-01', '2019-12-31')
+dartCrawler = DartCrawler.create({'name':'카카오','code':'035720'}, '2007-01-01', '2019-12-31')
 data = dartCrawler.crawling()
 print(data)
 
