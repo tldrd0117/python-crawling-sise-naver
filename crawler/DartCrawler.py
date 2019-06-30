@@ -15,8 +15,8 @@ class DartCrawler:
     @staticmethod
     def create(target, startDate, endDate):
         newCrawler = DartCrawler()
-        newCrawler.name = target['name']
-        newCrawler.code = target['code']
+        newCrawler.name = target['Name']
+        newCrawler.code = target['Code']
         newCrawler.startDate = startDate.replace('-','')
         newCrawler.endDate = endDate.replace('-','')
         return newCrawler
@@ -98,7 +98,7 @@ class DartCrawler:
             html = self.getViewerHTML(self.getViewerParam(rcpNo, ['요약재무정보', '재무에 관한 사항']))
             if html:
                 total, profit = self.getTotal(html)
-            results.append({'date':rptNm[0],'stockNum':stockNum, 'total':total, 'profit':profit})
+            results.append({'Code':self.code, 'Name':self.name ,'date':rptNm[0],'stockNum':stockNum, 'total':total, 'profit':profit})
         return results
         # htmlFile = open('finhtml/'+self.name+'_'+rcpNo[0]+'.html', 'w')
         # htmlFile.write(str(html))
@@ -108,12 +108,18 @@ class DartCrawler:
             return None
         dfs = pd.read_html(html)
         stockNum = None
+        filters = ['구 분', ('구 분', '구 분')]
         for df in dfs:
-            if ('구 분', '구 분') in list(df.columns):
-                index = df[('구 분', '구 분')][df[('구 분', '구 분')]=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].index
-                stockNum = df.iloc[index[0]]['주식의 종류']['합계']
+            for filterVal in filters:
+                if filterVal in list(df.columns):
+                    index = df[filterVal][df[filterVal]=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].index
+                    print('index', index)
+                    if len(index) > 0:
+                        stockNum = df.iloc[index[0]]['주식의 종류']['합계']
         return stockNum
     def getTotal(self, html):
+        if html.find('table') == -1 and html.find('TABLE') == -1:
+            return None
         dfs = pd.read_html(html)
         total = None
         profit = None
@@ -130,15 +136,25 @@ class DartCrawler:
                         if len(index2) == 0:
                             continue
                     # print(df)
-                    total = df.iloc[index1[0]].iloc[1]
-                    profit = df.iloc[index2[0]].iloc[1]
+                    total = str(df.iloc[index1[0]].iloc[1]).replace('(','').replace(')','').replace(',','')
+                    profit = str(df.iloc[index2[0]].iloc[1]).replace('(','').replace(')','').replace(',','')
                     break
                 if filterVal in list(df.values)[0]:
                     for value in df.values:
                         if value[0] == '자본총계':
-                            total = value[1]
+                            total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                    for value in df.values:
                         if value[0] == '당기순이익' or value[0] == '당기순이익(손실)':
-                            profit = value[1]
+                            profit = str(value[1]).replace('(','').replace(')','').replace(',','')
+
+        if total == None or profit == None:
+            for df in dfs:
+                for value in df.values:
+                    if value[0] == '자본총계':
+                        total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                for value in df.values:
+                    if value[0] == '당기순이익' or value[0] == '당기순이익(손실)':
+                        profit = str(value[1]).replace('(','').replace(')','').replace(',','')
             
         return total, profit
 
@@ -146,9 +162,9 @@ class DartCrawler:
 
 # if __name__ == "__main__":
     # 현대중공업지주267250
-dartCrawler = DartCrawler.create({'name':'카카오','code':'035720'}, '2007-01-01', '2019-12-31')
-data = dartCrawler.crawling()
-print(data)
+# dartCrawler = DartCrawler.create({'name':'한국패러랠','code':'168490'}, '2007-01-01', '2019-12-31')
+# data = dartCrawler.crawling()
+# print(data)
 
 # df['구 분'][df['구 분']=='자본총계':df['구 분']=='매출액']
 
@@ -159,6 +175,8 @@ print(data)
 # df['구 분'][df['구 분'] == 'Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)']
 # df['Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)','합계']
 # print(dfs[1]['합계'])
+
+# In[23]: 크롤링
            
 
 

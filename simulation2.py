@@ -7,6 +7,7 @@ from crawler.NaverCapFromCodeCrawler import NaverCapFromCodeCrawler
 from crawler.NaverStockCrawler import NaverStockCrawler
 from crawler.NavarSearchCodeCrawler import NavarSearchCodeCrawler
 from crawler.NaverPbrCrawler import NaverPbrCrawler
+from crawler.DartCrawler import DartCrawler
 
 from crawler.data.NaverDate import NaverDate
 from crawler.data.NaverResultData import NaverResultData
@@ -121,6 +122,37 @@ class StockLoader:
             print(name, 'read...')
             df = pd.read_hdf(name, key='df')
         return df
+    def loadDartData(self, topcap):
+        name = 'DART_'+ '2007-01-01_2019-12-31.h5'
+        if not os.path.isfile(name):
+            targets = []
+            for index, row  in topcap.iterrows():
+                value = {'Code': row['Code'], 'Name': row['Name']}
+                if not value in targets:
+                    targets.append(value)
+            df = pd.DataFrame(columns=['종목코드','종목명','당기순이익', '자본총계', '주식수', '시가총액'])
+            for target in targets:
+                print(target)
+                dartCrawler = DartCrawler.create(target, '2007-01-01', '2019-12-31')
+                data = dartCrawler.crawling()
+                if not data:
+                    continue
+                for v in data:
+                    date = pd.to_datetime(v['date'], format='%Y.%m')
+                    marcap = topcap[topcap['Code']==target['Code']]
+                    if date.year in marcap.index.year:
+                        marcap = marcap[str(date.year)]['Marcap'].values[0]
+                    else:
+                        marcap = None
+                    #append로 변경해야함
+                    df.loc[date] = [v['Code'], v['Name'],v['profit'], v['total'], v['stockNum'], marcap]
+                print(df)
+                # values[target['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
+            df.to_hdf(name, key='df', mode='w')
+        else:
+            print(name, 'read...')
+            df = pd.read_hdf(name, key='df')
+        return df
     
     def loadSearchCodeName(self, name):
         crawler = NavarSearchCodeCrawler.create(name)
@@ -141,10 +173,7 @@ class StockLoader:
                 targetList.append({'Name':target['Name'], 'Code':target['Code']})
 
         return targetList
-    def loadDartData(self, targets):
-        for target in targets:
-            dartCrawler = DartCrawler.create(target, '2007-01-01', '2019-12-31')
-            data = dartCrawler.crawling()
+    
 
 sl = StockLoader.create()
 # In[22]: getETF
@@ -214,7 +243,9 @@ kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI', '2005-12-31', '2019-12-31'),
 # topcapdf.loc['2012-01-01':endDateStr]
 
 # In[22]: 재무제표
+topcap = sl.load(sl.makeName('TOPCAP', '2007-01-01', '2019-12-31'))
 
+sl.loadDartData(topcap)
 
 
 # In[5]: look
