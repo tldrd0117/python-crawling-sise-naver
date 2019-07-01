@@ -137,6 +137,7 @@ class StockLoader:
                 data = dartCrawler.crawling()
                 if not data:
                     continue
+                newdf = pd.DataFrame(columns=['종목코드','종목명','당기순이익', '자본총계', '주식수', '시가총액'])
                 for v in data:
                     date = pd.to_datetime(v['date'], format='%Y.%m')
                     marcap = topcap[topcap['Code']==target['Code']]
@@ -145,8 +146,9 @@ class StockLoader:
                     else:
                         marcap = None
                     #append로 변경해야함
-                    df.loc[date] = [v['Code'], v['Name'],v['profit'], v['total'], v['stockNum'], marcap]
-                print(df)
+                    newdf.loc[date] = [v['Code'], v['Name'],v['profit'], v['total'], v['stockNum'], marcap]
+                print(newdf)
+                df = pd.concat([df,newdf])
                 # values[target['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
             df.to_hdf(name, key='df', mode='w')
         else:
@@ -176,6 +178,10 @@ class StockLoader:
     
 
 sl = StockLoader.create()
+# In[22]: 재무제표
+topcap = sl.load(sl.makeName('TOPCAP', '2007-01-01', '2019-12-31'))
+
+sl.loadDartData(topcap)
 # In[22]: getETF
 KODEX = sl.loadSearchCodeName('KODEX')
 TIGER = sl.loadSearchCodeName('TIGER')
@@ -242,10 +248,7 @@ kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI', '2005-12-31', '2019-12-31'),
 # topdf
 # topcapdf.loc['2012-01-01':endDateStr]
 
-# In[22]: 재무제표
-topcap = sl.load(sl.makeName('TOPCAP', '2007-01-01', '2019-12-31'))
 
-sl.loadDartData(topcap)
 
 
 # In[5]: look

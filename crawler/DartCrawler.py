@@ -115,46 +115,67 @@ class DartCrawler:
                     index = df[filterVal][df[filterVal]=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].index
                     print('index', index)
                     if len(index) > 0:
-                        stockNum = df.iloc[index[0]]['주식의 종류']['합계']
+                        if '합계' in list(df.iloc[index[0]]['주식의 종류'].index):
+                            stockNum = df.iloc[index[0]]['주식의 종류']['합계']
+                        if '합 계' in list(df.iloc[index[0]]['주식의 종류'].index):
+                            stockNum = df.iloc[index[0]]['주식의 종류']['합 계']
+                        
         return stockNum
     def getTotal(self, html):
         if html.find('table') == -1 and html.find('TABLE') == -1:
-            return None
+            return None, None
         dfs = pd.read_html(html)
         total = None
         profit = None
         filters = ['구 분', ('구 분', '구 분')]
+        totalFilter = ['자본총계', '자 본 총 계', '자본 총계']
+        profitFilter = ['당기순이익','[당기순이익]','당기순이익(손실)', 'Ⅳ.당기순이익', 'Ⅴ.당기순이익', '분기(당기)순이익', 'Ⅵ.당기순이익', 'XIII. 당기순이익(손실)', '당기순이익(당기순손실)', 'XIII. 당기순이익']
         for df in dfs:
             for filterVal in filters:
+                #헤더에 있을 때
                 if filterVal in list(df.columns):
-                    index1 = df[filterVal][df[filterVal]=='자본총계'].index
+                    for compVal in totalFilter:
+                        index1 = df[filterVal][df[filterVal]==compVal].index
+                        if len(index1) != 0:
+                            break 
                     if len(index1) == 0:
                         continue
-                    index2 = df[filterVal][df[filterVal]=='당기순이익'].index
+                    index2 = []
+                    for compVal in profitFilter:
+                        index2 = df[filterVal][df[filterVal]==compVal].index
+                        if len(index2) != 0:
+                            break
                     if len(index2) == 0:
-                        index2 = df[filterVal][df[filterVal]=='당기순이익(손실)'].index
-                        if len(index2) == 0:
-                            continue
+                        continue
                     # print(df)
                     total = str(df.iloc[index1[0]].iloc[1]).replace('(','').replace(')','').replace(',','')
                     profit = str(df.iloc[index2[0]].iloc[1]).replace('(','').replace(')','').replace(',','')
                     break
+                #바디에 있을 때
                 if filterVal in list(df.values)[0]:
                     for value in df.values:
-                        if value[0] == '자본총계':
-                            total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                        for compVal in totalFilter:
+                            if compVal == str(value[0]):
+                                total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                                break
                     for value in df.values:
-                        if value[0] == '당기순이익' or value[0] == '당기순이익(손실)':
-                            profit = str(value[1]).replace('(','').replace(')','').replace(',','')
+                        for compVal in profitFilter:
+                            if compVal == str(value[0]):
+                                profit = str(value[1]).replace('(','').replace(')','').replace(',','')
+                                break
 
         if total == None or profit == None:
             for df in dfs:
                 for value in df.values:
-                    if value[0] == '자본총계':
-                        total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                    for compVal in totalFilter:
+                        if compVal == str(value[0]):
+                            total = str(value[1]).replace('(','').replace(')','').replace(',','')
+                            break
                 for value in df.values:
-                    if value[0] == '당기순이익' or value[0] == '당기순이익(손실)':
-                        profit = str(value[1]).replace('(','').replace(')','').replace(',','')
+                    for compVal in profitFilter:
+                        if compVal == str(value[0]):
+                            profit = str(value[1]).replace('(','').replace(')','').replace(',','')
+                            break
             
         return total, profit
 
@@ -162,7 +183,7 @@ class DartCrawler:
 
 # if __name__ == "__main__":
     # 현대중공업지주267250
-# dartCrawler = DartCrawler.create({'name':'한국패러랠','code':'168490'}, '2007-01-01', '2019-12-31')
+# dartCrawler = DartCrawler.create({'Name':'삼성전자','Code':'005930'}, '2007-01-01', '2019-12-31')
 # data = dartCrawler.crawling()
 # print(data)
 
