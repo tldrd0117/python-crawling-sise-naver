@@ -70,8 +70,8 @@ class DartCrawler:
         return 'http://dart.fss.or.kr/report/viewer.do?rcpNo=%s&dcmNo=%s&eleId=%s&offset=%s&length=%s&dtd=%s' % (params[0], params[1], params[2], params[3], params[4], params[5])
 
     def getViewerHTML(self,params):
-        print(params)
         if len(params) < 6:
+            print('no Params:', params)
             return None
         viewerDetailUrl = self.viewerDetailUrl(params)
         r = http.request('GET', viewerDetailUrl, timeout=10, retries=10)
@@ -113,7 +113,6 @@ class DartCrawler:
             for filterVal in filters:
                 if filterVal in list(df.columns):
                     index = df[filterVal][df[filterVal]=='Ⅳ. 발행주식의 총수 (Ⅱ-Ⅲ)'].index
-                    print('index', index)
                     if len(index) > 0:
                         if '합계' in list(df.iloc[index[0]]['주식의 종류'].index):
                             stockNum = df.iloc[index[0]]['주식의 종류']['합계']

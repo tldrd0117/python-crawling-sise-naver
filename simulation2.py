@@ -148,6 +148,7 @@ class StockLoader:
                     #append로 변경해야함
                     newdf.loc[date] = [v['Code'], v['Name'],v['profit'], v['total'], v['stockNum'], marcap]
                 print(newdf)
+                time.sleep(0.5)
                 df = pd.concat([df,newdf])
                 # values[target['Name']] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
             df.to_hdf(name, key='df', mode='w')
