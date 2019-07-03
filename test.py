@@ -49,4 +49,6 @@ print(data)
 crawler = NaverPbrCrawler()
 data = crawler.crawling('005930')
 print(data)
+
+# In[6]: 
 #%%
