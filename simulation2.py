@@ -196,8 +196,8 @@ class StockLoader:
 
 sl = StockLoader.create()
 # In[22]: 재무제표
-dfs = sl.loadFactor()
-dfs['per'][2018].sort_values()
+factordf = sl.loadFactor()
+# dfs['per'][2018].sort_values()
 # In[22]: getETF
 KODEX = sl.loadSearchCodeName('KODEX')
 TIGER = sl.loadSearchCodeName('TIGER')
@@ -323,6 +323,20 @@ class StockTransaction:
         rate = self.getMomentumInvestRate(momentumMean[intersect], momentumScoreMean[intersect], shareNum=shares.shareNum, cashRate=cashRate, mementumLimit=mementumLimit)
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
+    
+    def setPerRate(self, shares, current, topdf, factordf):
+        targetdf = None
+        factor = list(filter(lambda x : x['name']=='per', shares.factor.factors))
+        if len(factor) <= 0:
+            return
+        factor = factor[0]
+        targetdf = factordf[factor['name']][current.year - 1]
+        shcodes = list(targetdf.sort_values().head(factor['num']).index)
+        nameList = list(factordf[factor['name']].loc[shcodes]['종목명'])
+        rate = pd.Series([1/len(nameList)]*len(nameList), index=nameList)
+        shares.investRate = rate
+        shares.perMoneyRate = 1
+
 
     def buy(self, shares, wallet, buyDate, valuedf):
         money = shares.investMoney
@@ -345,6 +359,8 @@ class StockTransaction:
             sValue = stockValue[col]
             while (rMoney - sValue) > 0:
                 if col in stockWallet.columns and buyDate in stockWallet.index:
+                    if stockWallet[col][buyDate]%100 == 0:
+                        print('buy')
                     stockWallet[col][buyDate] = stockWallet[col][buyDate] + 1
                 money -= sValue
                 rMoney -= sValue
@@ -374,12 +390,16 @@ class Shares:
         self.shareList = shareList
         self.investRate = None
         self.perMoneyRate = None
+        self.momentum = None
     
     def calculateInvestMoney(self, sumMoneyRate, stockMoney):
-        self.investMoney = self.moneyRate/sumMoneyRate * stockMoney * self.perMoneyRate
-        self.restMoney = self.moneyRate/sumMoneyRate * stockMoney * (1 - self.perMoneyRate)
+        perMoney = self.perMoneyRate if self.perMoneyRate else 1
+        self.investMoney = self.moneyRate/sumMoneyRate * stockMoney * perMoney
+        self.restMoney = self.moneyRate/sumMoneyRate * stockMoney * (1 - perMoney)
     def setMomentum(self, momentum):
         self.momentum = momentum
+    def setFactor(self, factor):
+        self.factor = factor
 
     @staticmethod
     def toNameList(dictList):
@@ -392,6 +412,11 @@ class MomentumStrategy:
         self.mUnit = mUnit
         self.mementumLimit = mementumLimit
         self.limit12 = limit12
+
+class FactorStrategy:
+    def __init__(self, cashRate=0, factors=[{'name':'per', 'num': 30}]):
+        self.cashRate = cashRate
+        self.factors = factors
 # class LosscutStrategy:
     # def __init__(self, losscut=0):
         # self.losscut = losscut
@@ -427,9 +452,14 @@ class AssetGroup:
         return list(set(sumTargets))
     def setMomentumRate(self, current, topdf):
         for shares in self.assetGroup:
-            momentum = shares.momentum
-            if momentum:
+            if shares.momentum:
+                momentum = shares.momentum
                 self.st.setMonmentumRate(shares, current, topdf, cashRate=momentum.cashRate, mNum=momentum.mNum, mUnit=momentum.mUnit, mementumLimit=momentum.mementumLimit, limit12=momentum.limit12)
+    def setPerRate(self, current, topdf, factordf):
+        for shares in self.assetGroup:
+            if shares.factor:
+                self.st.setPerRate(shares, current, topdf, factordf)
+    
     def recordBeforeHold(self, buydf):
         for shares in self.assetGroup:
             shares.stockHoldMoney = buydf[shares.investRate.index].dropna(axis=0, how='all')
@@ -554,6 +584,7 @@ domesticETFList = Shares.toNameList(KODEX_domestic+TIGER_domestic+KOSEF_domestic
 #domesticList = Shares.toNameList(KODEX_domestic+TIGER_domestic)
 domesticList = list(topcap[str(current.year)]['Name'])
 
+
 # bondListNum = 3 #int(len(KODEX_bond+TIGER_bond) * 3 / 10)
 # foreignListNum = 5 #int(len(KODEX_foreign+TIGER_foreign) * 3 / 10)
 # domesticListNum = 100#int(len(KODEX_domestic+TIGER_domestic) * 3 / 10)
@@ -563,16 +594,16 @@ domesticList = list(topcap[str(current.year)]['Name'])
 wallet = Wallet()
 moneySum = pd.DataFrame()
 
-bondETF = Shares('채권', shareNum=3, moneyRate=0.25, shareList=bondETFList)
-foreignETF = Shares('외국 ETF', shareNum=5, moneyRate=1, shareList=foreignETFList)
+# bondETF = Shares('채권', shareNum=3, moneyRate=0.25, shareList=bondETFList)
+# foreignETF = Shares('외국 ETF', shareNum=5, moneyRate=1, shareList=foreignETFList)
 # inverseETF = Shares('인버스 ETF', shareNum=5, moneyRate=1, shareList=inverseETFList)
-domesticETF = Shares('국내 ETF', shareNum=10, moneyRate=1, shareList=domesticETFList)
-# domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
-
-bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=12, mUnit='M', mementumLimit=0))
-foreignETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
+# domesticETF = Shares('국내 ETF', shareNum=10, moneyRate=1, shareList=domesticETFList)
+domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
+domestic.setFactor(FactorStrategy())
+# bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=12, mUnit='M', mementumLimit=0))
+# foreignETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
 # inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=False))
-domesticETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
+# domesticETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
 # domestic.setMomentum(MomentumStrategy(cashRate=0.5, mNum=6, mUnit='M', mementumLimit=0.25, limit12=True))
 
 
@@ -580,7 +611,7 @@ domesticETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementum
 # domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
 
 ag = AssetGroup(st)
-ag.addShares([bondETF, foreignETF, domesticETF])
+ag.addShares([domestic])
 # ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
@@ -593,6 +624,7 @@ while endDate > current:
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
     ag.setMomentumRate(current, topdf)
+    ag.setPerRate(current, topdf, factordf)
     #TARGET
     ag.calculateAllInvestMoney(wallet)
     ag.buyAll(wallet, current, topdf)
