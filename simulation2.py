@@ -354,6 +354,7 @@ class StockTransaction:
                 stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
             else:
                 stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
+        
         for col in rateMoney.index:
             rMoney = rateMoney[col]
             sValue = stockValue[col]
