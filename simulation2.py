@@ -335,7 +335,7 @@ class StockTransaction:
         shares.investRate = rate
         shares.perMoneyRate = 1
 
-    def getMomentumList(self, shares, current, targetdf, mNum, mUnit, limit):
+    def getMomentumList(self, shares, current, targetdf, mNum, mUnit, limit, minVal=-1):
         mdf = targetdf.resample('M').mean()
         beforeMomentumDate = current + pd.Timedelta(-mNum, unit=mUnit)
         start = mdf.index.get_loc(beforeMomentumDate, method='nearest')
@@ -343,6 +343,7 @@ class StockTransaction:
         oneYearDf = mdf.iloc[start:end+1]
         momentum = oneYearDf.iloc[-1] - oneYearDf
         momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
+        momentumScore = momentumScore[momentumScore >= minVal]
         return list(momentumScore.mean().sort_values(ascending=False).head(limit).index)
         
     
@@ -550,7 +551,7 @@ class Wallet:
             intersect = list(set(returnRate.index) & set(allIndex))
             returnRate = returnRate[intersect]
             returnRate = returnRate.dropna(axis=0, how='all')
-            returnRate = returnRate[returnRate <= 0]
+            returnRate = returnRate[returnRate <= 0.8]
             returnRate = returnRate.dropna(axis=0, how='all')
             intersect = list(set(returnRate.index) & set(cutlist))
             returnRate = returnRate.drop(intersect, axis=0)
@@ -651,11 +652,11 @@ while endDate > current:
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
     # ag.setMomentumRate(current, topdf)
     # ag.setFactorRate(current, topdf, factordf, 'per')
-    target = st.getMomentumList(domestic, current, topdf, mNum=12, mUnit='M', limit=1000)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 250)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 50)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 30)
+    target = st.getMomentumList(domestic, current, topdf, mNum=2, mUnit='M', limit=1000, minVal=0)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 50)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '영업활동으로인한현금흐름', False, 39)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 20)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 10)
