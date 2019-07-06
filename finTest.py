@@ -16,5 +16,8 @@ for upCode in upCodes:
         dfs[factor] = pd.concat([dfs[factor], df])
 dfs
 
+# In[4]: rank
+
+
 
 #%%

@@ -273,8 +273,6 @@ kospidf = sl.loadDomesticIndex(sl.makeName('KOSPI', '2005-12-31', '2019-12-31'),
 
 # In[4]: 시뮬레이션
 
-
-
 class StockTransaction:
     @staticmethod
     def create():
@@ -324,15 +322,40 @@ class StockTransaction:
         shares.investRate = rate['invest']
         shares.perMoneyRate = rate['perMoney']
     
-    def setPerRate(self, shares, current, topdf, factordf):
+    def setFactorRate(self, shares, current, topdf, factordf, factor):
         targetdf = None
-        factor = list(filter(lambda x : x['name']=='per', shares.factor.factors))
+        factor = list(filter(lambda x : x['name']==factor, shares.factor.factors))
         if len(factor) <= 0:
             return
         factor = factor[0]
         targetdf = factordf[factor['name']][current.year - 1]
-        shcodes = list(targetdf.sort_values().head(factor['num']).index)
+        shcodes = list(targetdf.sort_values(ascending=factor['ascending']).head(factor['num']).index)
         nameList = list(factordf[factor['name']].loc[shcodes]['종목명'])
+        rate = pd.Series([1/len(nameList)]*len(nameList), index=nameList)
+        shares.investRate = rate
+        shares.perMoneyRate = 1
+
+    def getMomentumList(self, shares, current, targetdf, mNum, mUnit, limit):
+        mdf = targetdf.resample('M').mean()
+        beforeMomentumDate = current + pd.Timedelta(-mNum, unit=mUnit)
+        start = mdf.index.get_loc(beforeMomentumDate, method='nearest')
+        end = mdf.index.get_loc(current, method='nearest')
+        oneYearDf = mdf.iloc[start:end+1]
+        momentum = oneYearDf.iloc[-1] - oneYearDf
+        momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
+        return list(momentumScore.mean().sort_values(ascending=False).head(limit).index)
+        
+    
+    def getFactorList(self, shares, current, targetdf, factordf, factor, ascending, num):
+        yearDf = factordf[factor][factordf[factor]['종목명'].isin(list(targetdf.columns))]
+        yearDf = yearDf[current.year - 1]
+        # intersect = list(set(yearDf.columns) & set(nameList))
+        shcodes = list(yearDf.sort_values(ascending=ascending).head(num).index)
+        nameList = list(factordf[factor].loc[shcodes]['종목명'])
+        intersect = list(set(targetdf.columns) & set(nameList))
+        return intersect
+    
+    def calculateFactorList(self, shares, nameList):
         rate = pd.Series([1/len(nameList)]*len(nameList), index=nameList)
         shares.investRate = rate
         shares.perMoneyRate = 1
@@ -342,6 +365,7 @@ class StockTransaction:
         money = shares.investMoney
         rateMoney = shares.investRate * shares.investMoney
         stockWallet = wallet.stockWallet
+        # stockWallet = pd.DataFrame()
         stockValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][rateMoney.index]
         rowdf = pd.DataFrame(data=[[0]*len(rateMoney.index)], index=[buyDate], columns=rateMoney.index)
         intersect = list(set(stockWallet.columns) & set(rowdf.columns))
@@ -354,17 +378,18 @@ class StockTransaction:
                 stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
             else:
                 stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
-        
+        #구매
+        start1 = time.time()
         for col in rateMoney.index:
             rMoney = rateMoney[col]
             sValue = stockValue[col]
             while (rMoney - sValue) > 0:
                 if col in stockWallet.columns and buyDate in stockWallet.index:
-                    if stockWallet[col][buyDate]%100 == 0:
-                        print('buy')
-                    stockWallet[col][buyDate] = stockWallet[col][buyDate] + 1
+                    a = stockWallet.at[buyDate, col]
+                    stockWallet.at[buyDate, col] = a + 1
                 money -= sValue
                 rMoney -= sValue
+        print("time :", time.time() - start1)  # 현재시각 - 시작시간 = 실행 시간
         wallet.stockWallet = stockWallet
         shares.restMoney += money
         print('투자리스트:',shares.name)
@@ -415,7 +440,7 @@ class MomentumStrategy:
         self.limit12 = limit12
 
 class FactorStrategy:
-    def __init__(self, cashRate=0, factors=[{'name':'per', 'num': 30}]):
+    def __init__(self, cashRate=0, factors=[{'name':'per', 'num': 30, 'ascending':True}]):
         self.cashRate = cashRate
         self.factors = factors
 # class LosscutStrategy:
@@ -456,10 +481,10 @@ class AssetGroup:
             if shares.momentum:
                 momentum = shares.momentum
                 self.st.setMonmentumRate(shares, current, topdf, cashRate=momentum.cashRate, mNum=momentum.mNum, mUnit=momentum.mUnit, mementumLimit=momentum.mementumLimit, limit12=momentum.limit12)
-    def setPerRate(self, current, topdf, factordf):
+    def setFactorRate(self, current, topdf, factordf, factor):
         for shares in self.assetGroup:
             if shares.factor:
-                self.st.setPerRate(shares, current, topdf, factordf)
+                self.st.setFactorRate(shares, current, topdf, factordf, factor=factor)
     
     def recordBeforeHold(self, buydf):
         for shares in self.assetGroup:
@@ -525,7 +550,7 @@ class Wallet:
             intersect = list(set(returnRate.index) & set(allIndex))
             returnRate = returnRate[intersect]
             returnRate = returnRate.dropna(axis=0, how='all')
-            returnRate = returnRate[returnRate <= 0.97]
+            returnRate = returnRate[returnRate <= 0]
             returnRate = returnRate.dropna(axis=0, how='all')
             intersect = list(set(returnRate.index) & set(cutlist))
             returnRate = returnRate.drop(intersect, axis=0)
@@ -600,7 +625,7 @@ moneySum = pd.DataFrame()
 # inverseETF = Shares('인버스 ETF', shareNum=5, moneyRate=1, shareList=inverseETFList)
 # domesticETF = Shares('국내 ETF', shareNum=10, moneyRate=1, shareList=domesticETFList)
 domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareList=domesticList)
-domestic.setFactor(FactorStrategy())
+# domestic.setFactor(FactorStrategy(factors=[{'name':'per', 'num': 30, 'ascending': True}]))
 # bondETF.setMomentum(MomentumStrategy(cashRate=0, mNum=12, mUnit='M', mementumLimit=0))
 # foreignETF.setMomentum(MomentumStrategy(cashRate=0, mNum=6, mUnit='M', mementumLimit=0, limit12=True))
 # inverseETF.setMomentum(MomentumStrategy(cashRate=0, mNum=3, mUnit='M', mementumLimit=0.25, limit12=False))
@@ -618,14 +643,23 @@ ag.addShares([domestic])
 while endDate > current:
     print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
     print('simulate...', current)
-    # domestic.shareList = list(topcap[str(current.year)]['Name'])
+    domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
     wallet.restMoney = money * rebalaceRate
     stockRestMoney = 0
 
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
-    ag.setMomentumRate(current, topdf)
-    ag.setPerRate(current, topdf, factordf)
+    # ag.setMomentumRate(current, topdf)
+    # ag.setFactorRate(current, topdf, factordf, 'per')
+    target = st.getMomentumList(domestic, current, topdf, mNum=12, mUnit='M', limit=1000)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 250)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 50)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 30)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '영업활동으로인한현금흐름', False, 39)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 20)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 10)
+    st.calculateFactorList(domestic, target)
     #TARGET
     ag.calculateAllInvestMoney(wallet)
     ag.buyAll(wallet, current, topdf)
@@ -669,6 +703,16 @@ portfolio = moneySum['total'] / firstMoney
 투자기간 = len(moneySum.index)/12
 print(투자기간)
 # print(portfolio)
+e = pd.date_range(start=portfolio.index[12], periods=투자기간, freq=pd.DateOffset(years=1))
+d = [ portfolio.index.get_loc(date, method='nearest')for date in e]
+print(portfolio[d]/portfolio[d].shift(1))
+# print((portfolio[d]**(1/12))*100-100)
+print((portfolio/portfolio.shift(1)).sum()/len(portfolio.index))
+print(portfolio[-1]/portfolio.std())
+print((portfolio/portfolio.shift(1)))
+# print(portfolio.std())
+
+# print('연간 수익률', pe)
 print('연평균 수익률',((portfolio[-1]**(1/투자기간))*100-100))
 
 print('최대 하락률',((portfolio - portfolio.shift(1))/portfolio.shift(1)*100).min())
