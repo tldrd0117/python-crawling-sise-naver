@@ -347,9 +347,11 @@ class StockTransaction:
         return list(momentumScore.mean().sort_values(ascending=False).head(limit).index)
         
     
-    def getFactorList(self, shares, current, targetdf, factordf, factor, ascending, num):
+    def getFactorList(self, shares, current, targetdf, factordf, factor, ascending, num, minVal=-10000000, maxVal=10000000):
         yearDf = factordf[factor][factordf[factor]['종목명'].isin(list(targetdf.columns))]
         yearDf = yearDf[current.year - 1]
+        yearDf = yearDf[yearDf >= minVal]
+        yearDf = yearDf[yearDf <= maxVal]
         # intersect = list(set(yearDf.columns) & set(nameList))
         shcodes = list(yearDf.sort_values(ascending=ascending).head(num).index)
         nameList = list(factordf[factor].loc[shcodes]['종목명'])
@@ -360,7 +362,6 @@ class StockTransaction:
         rate = pd.Series([1/len(nameList)]*len(nameList), index=nameList)
         shares.investRate = rate
         shares.perMoneyRate = 1
-
 
     def buy(self, shares, wallet, buyDate, valuedf):
         money = shares.investMoney
@@ -399,14 +400,16 @@ class StockTransaction:
         print(list(rateMoney.index))
         print('=================================================')
 
-    # def restInvestBuy(self, buyDate, valuedf, money, wallet):
-        # bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][bonddf.columns[0]]
-        # stockNum = 0
-        # while bondValue < money:
-            # money -= bondValue
-            # stockNum += 1
-        # wallet.bondNum = stockNum
-        # wallet.restMoney = money
+    def restInvestBuy(self, buyDate, valuedf, money, wallet):
+        bondValue = valuedf.iloc[valuedf.index.get_loc(buyDate, method='nearest')][valuedf.columns[0]]
+        stockNum = 0
+        while bondValue < money:
+            money -= bondValue
+            stockNum += 1
+        wallet.bondNum = stockNum
+        wallet.restMoney = money
+    
+    
 
 
 class Shares:
@@ -512,6 +515,14 @@ class Wallet:
         self.stockMoney = 0
         self.restMoney = 0
         self.bondNum = 0
+    
+    def calculateLosscutRate(self, current, topdf, name):
+        target = topdf[name]
+        currentloc = topdf.index.get_loc(current, method='nearest')
+        before = current + pd.Timedelta(-1, unit='M')
+        beforeloc = topdf.index.get_loc(before, method='nearest')
+        beforedf = target.iloc[beforeloc:currentloc]
+        return 1 - (beforedf.max() - beforedf.min()) / beforedf.mean()
 
     def goOneMonthAndlossCut(self, current, topdf, allIndex, ag):
         nextDate = current + pd.Timedelta(1, unit='M')
@@ -551,7 +562,10 @@ class Wallet:
             intersect = list(set(returnRate.index) & set(allIndex))
             returnRate = returnRate[intersect]
             returnRate = returnRate.dropna(axis=0, how='all')
-            returnRate = returnRate[returnRate <= 0.8]
+            losscutlate = pd.Series(index=returnRate.index)
+            for idx in list(losscutlate.index):
+                losscutlate.at[idx] = self.calculateLosscutRate(current, topdf, idx)
+            returnRate = returnRate[returnRate <= losscutlate]
             returnRate = returnRate.dropna(axis=0, how='all')
             intersect = list(set(returnRate.index) & set(cutlist))
             returnRate = returnRate.drop(intersect, axis=0)
@@ -596,7 +610,7 @@ class Wallet:
         return current
         
 #투자금
-firstMoney = 10000000
+firstMoney = 2000000
 money = firstMoney
 #현금비율
 rebalaceRate = 0
@@ -621,7 +635,7 @@ domesticList = list(topcap[str(current.year)]['Name'])
 wallet = Wallet()
 moneySum = pd.DataFrame()
 
-# bondETF = Shares('채권', shareNum=3, moneyRate=0.25, shareList=bondETFList)
+bondETF = Shares('채권', shareNum=1, moneyRate=0, shareList=bondETFList)
 # foreignETF = Shares('외국 ETF', shareNum=5, moneyRate=1, shareList=foreignETFList)
 # inverseETF = Shares('인버스 ETF', shareNum=5, moneyRate=1, shareList=inverseETFList)
 # domesticETF = Shares('국내 ETF', shareNum=10, moneyRate=1, shareList=domesticETFList)
@@ -638,12 +652,16 @@ domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareLis
 # domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
 
 ag = AssetGroup(st)
-ag.addShares([domestic])
+ag.addShares([domestic, bondETF])
 # ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
     print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
     print('simulate...', current)
+    # plusMoney = 500000
+    # print(plusMoney,'씩 적립')
+    # money+=plusMoney
+    
     domestic.shareList = list(topcap[str(current.year)]['Name'])
     wallet.stockMoney = money * (1-rebalaceRate)
     wallet.restMoney = money * rebalaceRate
@@ -652,21 +670,35 @@ while endDate > current:
     #해당돼는 날짜(Current)의 종목별 모멘텀 평균을 구한다
     # ag.setMomentumRate(current, topdf)
     # ag.setFactorRate(current, topdf, factordf, 'per')
-    target = st.getMomentumList(domestic, current, topdf, mNum=2, mUnit='M', limit=1000, minVal=0)
+    target = list(topdf.columns)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 1000)
+    # target = st.getMomentumList(domestic, current, topdf[target], mNum=12, mUnit='M', limit=500, minVal=0)
+    target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=1000, minVal=0)
     target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 50)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30, 0.1, 10)
+    # target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=100, minVal=0)
+
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 500)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 300)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 250)
+
+
+
+    
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', True, 30)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '영업활동으로인한현금흐름', False, 39)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 20)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 10)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 30)
     st.calculateFactorList(domestic, target)
+    st.calculateFactorList(bondETF, ['KODEX 국고채3년','KOSEF 국고채10년'])
     #TARGET
     ag.calculateAllInvestMoney(wallet)
     ag.buyAll(wallet, current, topdf)
     wallet.restMoney = ag.getRestMoney(wallet)
     #사고남은돈 + 지갑에 남은돈
     allIndex = ag.getInvestTargets()
+    # st.restInvestBuy(current, bonddf, wallet.restMoney, wallet)
     current, breaker = wallet.goOneMonthAndlossCut(current, topdf, allIndex, ag)
 
     #구매

@@ -17,7 +17,6 @@ for upCode in upCodes:
 dfs
 
 # In[4]: rank
-
-
+dfs['per'].shift(1, axis=1)
 
 #%%
