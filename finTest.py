@@ -19,4 +19,8 @@ dfs
 # In[4]: rank
 dfs['per'].shift(1, axis=1)
 
+# In[5]: 시가총액
+import pandas as pd
+dfs = pd.read_excel('fin/시가총액_2019_01_02.xlsx',sheet_name='시가총액', skiprows=3, converters={'종목코드':str})
+dfs
 #%%
