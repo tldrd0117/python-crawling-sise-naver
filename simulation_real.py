@@ -24,7 +24,7 @@ date = NaverDate.create(startDate=before, endDate=now)
 progress = 0
 compliteLen = len(codeName.keys())
 for key in codeName:
-    print(codeName[key],'collect...', str(progress),'/',str(compliteLen) ,str(progress/compliteLen)+'%')
+    print(codeName[key],'collect...', str(progress),'/',str(compliteLen) ,str(progress/compliteLen*100)+'%')
     crawler = NaverStockCrawler.create(key)
     data = crawler.crawling(date)
     prices[key] = { pd.to_datetime(item.date, format='%Y-%m-%d') : item.close for item in data }
@@ -46,6 +46,9 @@ for upCode in upCodes:
         if factor not in factorDf:
             factorDf[factor] = pd.DataFrame()
         factorDf[factor] = pd.concat([factorDf[factor], df])
+
+# In[4]: look
+topDf.resample('M').mean()
 
 
 # In[5]: 함수 설정
@@ -400,8 +403,10 @@ target = st.getFactorList(domestic, current, topDf[target], factorDf, 'pcr', Tru
 target = st.getFactorList(domestic, current, topDf[target], factorDf, 'per', True, 30, 0.1, 10)
 st.calculateFactorList(domestic, target)
 
-for item in list(domestic.investRate.index):
-    print(codeName[item], domestic.investRate[item])
+domestic.investRate.to_excel('output.xlsx',sheet_name='2019-07-07')
+
+# for item in list(domestic.investRate.index):
+    # print(codeName[item], domestic.investRate[item])
 
 # In[7]: 손절 퍼센티지
 wallet = Wallet()

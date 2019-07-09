@@ -41,7 +41,7 @@ print(font_name)
 mpl.rc('font', family=font_name) 
 
 # In[2]: date
-startDateStr = '2008-01-01'
+startDateStr = '2008-05-01'
 endDateStr = '2019-12-31'
 startDate = pd.to_datetime(startDateStr, format='%Y-%m-%d')
 endDate = pd.to_datetime(endDateStr, format='%Y-%m-%d')
@@ -197,6 +197,24 @@ class StockLoader:
 sl = StockLoader.create()
 # In[22]: 재무제표
 factordf = sl.loadFactor()
+pcrdf = factordf['pcr']
+salesdf = factordf['영업활동으로인한현금흐름']
+investdf = factordf['투자활동으로인한현금흐름']
+findf = factordf['재무활동으로인한현금흐름']
+factordf['투자활동으로인한현금흐름2']=pcrdf.iloc[:,3:]*salesdf.iloc[:,3:]/investdf.iloc[:,3:]
+factordf['재무활동으로인한현금흐름2']=pcrdf.iloc[:,3:]*salesdf.iloc[:,3:]/findf.iloc[:,3:]
+factordf['투자활동으로인한현금흐름2']['종목명'] = investdf['종목명']
+factordf['재무활동으로인한현금흐름2']['종목명'] = findf['종목명']
+
+
+pcrdf = factordf['영업활동으로인한현금흐름']
+compdf = pcrdf.shift(-1, axis=1)
+compdf['종목명'] = np.nan
+compdf['결산월'] = np.nan
+compdf['단위'] = np.nan
+targetdf = pcrdf-compdf
+targetdf['종목명'] = pcrdf['종목명']
+factordf['영업활동으로인한현금흐름증가율'] = targetdf
 # dfs['per'][2018].sort_values()
 # In[22]: getETF
 KODEX = sl.loadSearchCodeName('KODEX')
@@ -249,12 +267,12 @@ targetShares = {}
 for index, row  in topcap.iterrows():
     targetShares[row['Code']] = row['Name']
 #종목별 종가
-etfdf = sl.loadStockFromArr(sl.makeName('ETF2', endDateStr='2019-12-31'), KODEX + TIGER + KOSEF, beforeStr, '2019-12-31')
+# etfdf = sl.loadStockFromArr(sl.makeName('ETF2', endDateStr='2019-12-31'), KODEX + TIGER + KOSEF, beforeStr, '2019-12-31')
 topcapdf = sl.loadStockFromDict(sl.makeName('SHARETOPCAP', beforeStr='2006-01-01', endDateStr='2019-12-31'), targetShares, '2005-12-31', '2019-12-31')
-etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
-topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
-topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
-# topdf = topcapdf#pd.concat([etfdf,topcapdf], sorst=False, axis=1)
+# etfdf.index = etfdf.index.map(lambda dt: pd.to_datetime(dt.date()))
+# topcapdf.index = topcapdf.index.map(lambda dt: pd.to_datetime(dt.date()))
+# topdf = pd.concat([etfdf,topcapdf], sort=False, axis=1)
+topdf = topcapdf#pd.concat([etfdf,topcapdf], sorst=False, axis=1)
 
 # bonddf = sl.loadStockFromArr(sl.makeName('BOND_ETF'), KODEX_bond + TIGER_bond, beforeStr, endDateStr)
 #채권 종가
@@ -349,7 +367,10 @@ class StockTransaction:
     
     def getFactorList(self, shares, current, targetdf, factordf, factor, ascending, num, minVal=-10000000, maxVal=10000000):
         yearDf = factordf[factor][factordf[factor]['종목명'].isin(list(targetdf.columns))]
-        yearDf = yearDf[current.year - 1]
+        if current.month > 4:
+            yearDf = yearDf[current.year - 1]
+        else:
+            yearDf = yearDf[current.year - 2]
         yearDf = yearDf[yearDf >= minVal]
         yearDf = yearDf[yearDf <= maxVal]
         # intersect = list(set(yearDf.columns) & set(nameList))
@@ -610,7 +631,7 @@ class Wallet:
         return current
         
 #투자금
-firstMoney = 2000000
+firstMoney = 10000000
 money = firstMoney
 #현금비율
 rebalaceRate = 0
@@ -674,14 +695,16 @@ while endDate > current:
     # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 1000)
     # target = st.getMomentumList(domestic, current, topdf[target], mNum=12, mUnit='M', limit=500, minVal=0)
     target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=1000, minVal=0)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30, 0.1, 10)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름2', True, 100)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름2', True, 50)
+    # if current > pd.to_datetime('2009-05-01', format='%Y-%m-%d'):
+        # print('ok')
+        # target = st.getFactorList(domestic, current, topdf[target], factordf, '영업활동으로인한현금흐름증가율', False, 1000, minVal=0)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50, minVal=0.000001)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30, minVal=0.000001)
     # target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=100, minVal=0)
 
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 500)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 300)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 250)
 
 
 
