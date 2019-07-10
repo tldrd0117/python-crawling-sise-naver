@@ -358,10 +358,18 @@ class StockTransaction:
         beforeMomentumDate = current + pd.Timedelta(-mNum, unit=mUnit)
         start = mdf.index.get_loc(beforeMomentumDate, method='nearest')
         end = mdf.index.get_loc(current, method='nearest')
+        
         oneYearDf = mdf.iloc[start:end+1]
-        momentum = oneYearDf.iloc[-1] - oneYearDf
-        momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
-        momentumScore = momentumScore[momentumScore >= minVal]
+        latelyValue = oneYearDf.iloc[-1]
+        momentum = pd.DataFrame(latelyValue.values - oneYearDf.values, oneYearDf.index, oneYearDf.columns)
+        # momentumScore = momentum.applymap(lambda val: 1 if val > 0 else 0 )
+        momentumValues = momentum.values
+        momentumValues[momentumValues>0] = 1
+        momentumValues[momentumValues<=0] = 0
+        momentumScore = pd.DataFrame(momentumValues, momentum.index, momentum.columns)
+        # momentumScore = momentumScore.query('')
+        # momentumScore = momentumScore[momentumScore >= minVal]
+        
         return list(momentumScore.mean().sort_values(ascending=False).head(limit).index)
         
     
@@ -692,17 +700,30 @@ while endDate > current:
     # ag.setMomentumRate(current, topdf)
     # ag.setFactorRate(current, topdf, factordf, 'per')
     target = list(topdf.columns)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'roe', False, 1000)
     # target = st.getMomentumList(domestic, current, topdf[target], mNum=12, mUnit='M', limit=500, minVal=0)
     target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=1000, minVal=0)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', True, 100)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름2', True, 100)
-    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름2', True, 50)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 750)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 562, minVal=0.000001)
+    # target = st.getMomentumList(domestic, current, topdf[target], mNum=4, mUnit='M', limit=421, minVal=0)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 421)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 315, minVal=0.000001)
+    # target = st.getMomentumList(domestic, current, topdf[target], mNum=8, mUnit='M', limit=236, minVal=0)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 176)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 132, minVal=0.000001)
+    # target = st.getMomentumList(domestic, current, topdf[target], mNum=12, mUnit='M', limit=99, minVal=0)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50)
+    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30, minVal=0.000001)
+    
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, 'pbr', False, 41)
+
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름2', False, 200)
+    # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름2', False, 100)
+
     # if current > pd.to_datetime('2009-05-01', format='%Y-%m-%d'):
         # print('ok')
         # target = st.getFactorList(domestic, current, topdf[target], factordf, '영업활동으로인한현금흐름증가율', False, 1000, minVal=0)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'pcr', True, 50, minVal=0.000001)
-    target = st.getFactorList(domestic, current, topdf[target], factordf, 'per', True, 30, minVal=0.000001)
+    
     # target = st.getMomentumList(domestic, current, topdf[target], mNum=2, mUnit='M', limit=100, minVal=0)
 
 
