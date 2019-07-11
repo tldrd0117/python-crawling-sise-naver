@@ -482,6 +482,7 @@ class AssetGroup:
     def __init__(self, stockTransaction):
         self.assetGroup = []
         self.st = stockTransaction
+        self.losscutDf = pd.DataFrame(columns=['갯수', '평균', '전체평균'])
     def addShares(self, shares):
         if type(shares) is list:
             for share in shares:
@@ -529,6 +530,8 @@ class AssetGroup:
             target = target[target > 0]
             # print(buydf[shares.investRate.index].sum())
             intersect = list(set(shares.stockHoldMoney.index) & set(cutlist))
+            
+            self.losscutDf.loc[current] = [len(cutlist), target[intersect].mean() / shares.stockHoldMoney.mean(), target.mean() / shares.stockHoldMoney.mean()]
             stockHoldMoney = shares.stockHoldMoney.drop(intersect, axis=0)
             print(stockHoldMoney.sum())
             print(target.sum())
@@ -546,15 +549,15 @@ class Wallet:
     
     def calculateLosscutRate(self, current, topdf, name):
         target = topdf[name]
-        currentloc = topdf.index.get_loc(current, method='nearest')
+        currentloc = topdf.index.get_loc(current, method='ffill')
         before = current + pd.Timedelta(-1, unit='M')
-        beforeloc = topdf.index.get_loc(before, method='nearest')
+        beforeloc = topdf.index.get_loc(before, method='ffill')
         beforedf = target.iloc[beforeloc:currentloc]
         return 1 - (beforedf.max() - beforedf.min()) / beforedf.mean()
 
     def goOneMonthAndlossCut(self, current, topdf, allIndex, ag):
         nextDate = current + pd.Timedelta(1, unit='M')
-        indexloc = topdf.index.get_loc(current, method='nearest')
+        indexloc = topdf.index.get_loc(current, method='ffill')
         firstValue = topdf.iloc[indexloc][allIndex] 
         # print(self.stockWallet.iloc[-1])
         firstBuyMoney = (self.stockWallet.iloc[-1] * firstValue).dropna(axis=0, how='all')
@@ -580,14 +583,17 @@ class Wallet:
                 current = topdf.index[indexloc - 1]
                 break
             dateIndex = self.stockWallet.index.get_loc(current, method='ffill')
-            stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
+            latelyWallet = self.stockWallet.iloc[-1].dropna(axis=0, how='all') 
+            stockValue = topdf.iloc[topdf.index.get_loc(current, method='ffill')][latelyWallet.index]
             # print(self.stockWallet.iloc[-1].values)
             # print(stockValue.values)
-            buyValues = self.stockWallet.iloc[-1].dropna(axis=0, how='all').values * stockValue.values
+            buyValues = latelyWallet.values * stockValue.values
             # buyValues = buyValues[buyValues > 0]
             # print(elf.stockWallet.iloc[-1])
+            assert latelyWallet.index.equals(stockValue.index), '#####인덱스가 다른데요?'
+            
             buyMoney = pd.Series(buyValues, stockValue.index).dropna(axis=0, how='all')
-            intersect = list((set(buyMoney.index) & set(allIndex)).difference(set(cutlist)))
+            intersect = list((set(buyMoney.index)).difference(set(cutlist)))
             returnRate = pd.Series(buyMoney.values/firstBuyMoney.values, index = buyMoney.index)
             returnRate = returnRate[intersect].dropna(axis=0, how='all')
             losscutlate = pd.Series(index=returnRate.index)
@@ -606,15 +612,20 @@ class Wallet:
             indexloc+=1
         print('losscut',current, len(cutlist), cutlist)
         intersect = list(set(self.stockWallet.columns) & set(cutlist))
-        dropStockWallet = self.stockWallet.drop(intersect, axis=1)
-        dropStockValue = stockValue.drop(intersect, axis = 0)
 
         # print('dropStockWallet', dropStockWallet.iloc[-1][dropStockValue.index])
         # print('dropStockValue', dropStockValue)
         # print('restStockSellMoney', restStockSellMoney)
-        dropStockValue = dropStockValue.fillna(value=0.0)
-        ag.calYield( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue, cutlist )
-        self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum()
+        # dropStockValue = dropStockValue.fillna(value=0.0)
+        latelyWallet = self.stockWallet.iloc[-1].dropna(axis=0, how='all') 
+        stockValue = topdf.iloc[topdf.index.get_loc(current, method='ffill')][latelyWallet.index]
+
+        ag.calYield( latelyWallet * stockValue, cutlist )
+        
+        dropStockWallet = latelyWallet.drop(intersect, axis=0)
+        dropStockValue = stockValue.drop(intersect, axis = 0)
+        
+        self.stockMoney = ( dropStockWallet * dropStockValue ).values.sum()
             # beforeBuyMoney * buyMoney / beforeBuyMoney
         print('시간흐름:', time.time() - time1)
         return current, breaker
@@ -765,6 +776,7 @@ while endDate > current:
 
 # print('##소유주식', wallet.stockWallet)
 # print('##주식가격', wallet.moneyWallet)
+print('##손절',ag.losscutDf)
 print('##Total', moneySum)
 
 # In[7] 정리
@@ -794,8 +806,18 @@ print('최대 하락률',((portfolio - portfolio.shift(1))/portfolio.shift(1)*10
 print('최대 상승률',((portfolio - portfolio.shift(1))/portfolio.shift(1)*100).max())
 # (portfolio.shift(1) - portfolio)
 # (portfolio - portfolio.shift(1))/portfolio.shift(1)*100
+# In[5]: kospi vs 손절
+losscutdf = ag.losscutDf
+kospiComp = kospidf['종가']
+beforeKospiComp = kospiComp.shift(1)
+kospiComp = (kospiComp - beforeKospiComp) / beforeKospiComp + 1
+losscutdf['코스피'] = kospiComp.loc[losscutdf.index]
+losscutdf
 
 # In[7]: 그래프
+# In[13]: 코스피만
+kospidf['종가'].plot(figsize = (18,12), fontsize=12)
+
 # In[15]: 그래프 그리기
 choosedDf = moneySum[['total']]
 choosedDf['KOSPI'] = kospidf['종가']
@@ -808,6 +830,8 @@ plt = jisuDf.plot(figsize = (18,12), fontsize=12)
 fontProp = fm.FontProperties(fname=path, size=18)
 plt.legend(prop=fontProp)
 print(plt)
+
+
 
 
 
