@@ -410,7 +410,6 @@ class StockTransaction:
             else:
                 stockWallet = pd.concat([stockWallet, rowdf], axis=1, sort=False)
         #구매
-        start1 = time.time()
         for col in rateMoney.index:
             rMoney = rateMoney[col]
             sValue = stockValue[col]
@@ -420,7 +419,6 @@ class StockTransaction:
                     stockWallet.at[buyDate, col] = a + 1
                 money -= sValue
                 rMoney -= sValue
-        print("time :", time.time() - start1)  # 현재시각 - 시작시간 = 실행 시간
         wallet.stockWallet = stockWallet
         shares.restMoney += money
         print('투자리스트:',shares.name)
@@ -522,7 +520,8 @@ class AssetGroup:
     def recordBeforeHold(self, buydf):
         for shares in self.assetGroup:
             shares.stockHoldMoney = buydf[shares.investRate.index].dropna(axis=0, how='all')
-            shares.stockHoldMoney = shares.stockHoldMoney[shares.stockHoldMoney > 0]
+            comp = shares.stockHoldMoney > 0
+            shares.stockHoldMoney = pd.Series(shares.stockHoldMoney.values[comp], shares.stockHoldMoney.index[comp])
             # shares.stockHoldMoney = shares.stockHoldMoney[shares.stockHoldMoney>0]
     def calYield(self, buydf, cutlist):
         for shares in self.assetGroup:
@@ -559,18 +558,19 @@ class Wallet:
         firstValue = topdf.iloc[indexloc][allIndex] 
         # print(self.stockWallet.iloc[-1])
         firstBuyMoney = (self.stockWallet.iloc[-1] * firstValue).dropna(axis=0, how='all')
-        firstBuyMoney = firstBuyMoney[firstBuyMoney > 0]
+        # firstBuyMoney = firstBuyMoney[firstBuyMoney > 0]
         # firstBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * firstValue).values], index=[current], columns=self.stockWallet.columns)
         ag.recordBeforeHold(firstBuyMoney)
         cutlist=[]
         indexloc+=1
         dfSize = len(topdf.index)
         breaker = False
+        time1 = time.time()
+        
         while nextDate > current:
             # beforeValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex] 
             # beforeBuyMoney = pd.DataFrame([(self.stockWallet.iloc[-1] * beforeValue).values], index=[current], columns=self.stockWallet.columns)
             # self.moneyWallet = pd.concat([self.moneyWallet, beforeBuyMoney], sort=False)
-            #하루지나감 어렵다
             if dfSize -1 <= indexloc:
                 print('sizeFull')
                 breaker = True
@@ -580,34 +580,29 @@ class Wallet:
                 current = topdf.index[indexloc - 1]
                 break
             dateIndex = self.stockWallet.index.get_loc(current, method='ffill')
-            # buyTargets = self.stockWallet.loc[:,self.stockWallet.iloc[dateIndex]>0].columns
-            
             stockValue = topdf.iloc[topdf.index.get_loc(current, method='nearest')][allIndex]
-            
-            buyMoney = (self.stockWallet.iloc[-1] * stockValue).dropna(axis=0, how='all')
-            buyMoney = buyMoney[buyMoney > 0]
-            
-            returnRate = buyMoney/firstBuyMoney
-            intersect = list(set(returnRate.index) & set(allIndex))
-            returnRate = returnRate[intersect]
-            returnRate = returnRate.dropna(axis=0, how='all')
+            # print(self.stockWallet.iloc[-1].values)
+            # print(stockValue.values)
+            buyValues = self.stockWallet.iloc[-1].dropna(axis=0, how='all').values * stockValue.values
+            # buyValues = buyValues[buyValues > 0]
+            # print(elf.stockWallet.iloc[-1])
+            buyMoney = pd.Series(buyValues, stockValue.index).dropna(axis=0, how='all')
+            intersect = list((set(buyMoney.index) & set(allIndex)).difference(set(cutlist)))
+            returnRate = pd.Series(buyMoney.values/firstBuyMoney.values, index = buyMoney.index)
+            returnRate = returnRate[intersect].dropna(axis=0, how='all')
             losscutlate = pd.Series(index=returnRate.index)
             for idx in list(losscutlate.index):
                 losscutlate.at[idx] = self.calculateLosscutRate(current, topdf, idx)
-            returnRate = returnRate[returnRate <= losscutlate]
-            returnRate = returnRate.dropna(axis=0, how='all')
-            intersect = list(set(returnRate.index) & set(cutlist))
-            returnRate = returnRate.drop(intersect, axis=0)
-            
+            returnValues = returnRate.values <= losscutlate.values
+            if np.where(returnValues)[0].size > 0:
+                for col in returnRate.index[returnValues]:
+                    if col in cutlist:
+                        continue
+                    cutlist.append(col)
+                    self.restMoney += self.stockWallet.iloc[dateIndex].at[col] * stockValue.at[col]
+            # intersect = list(set(returnRate.index) & set(cutlist))
+            # returnRate = returnRate.drop(intersect, axis=0)
             #cutlist를 returnRate있게 걸러야함
-            for col in returnRate.index:
-                if col in cutlist:
-                    continue
-                cutlist.append(col)
-                # print('1',self.stockWallet.iloc[dateIndex])
-                # print('2',stockValue)
-                self.restMoney += self.stockWallet.iloc[dateIndex][col] * stockValue[col]
-                # restStockSellMoney += stockValue[col]
             indexloc+=1
         print('losscut',current, len(cutlist), cutlist)
         intersect = list(set(self.stockWallet.columns) & set(cutlist))
@@ -621,7 +616,7 @@ class Wallet:
         ag.calYield( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue, cutlist )
         self.stockMoney = ( dropStockWallet.iloc[-1][dropStockValue.index] * dropStockValue ).values.sum()
             # beforeBuyMoney * buyMoney / beforeBuyMoney
-        
+        print('시간흐름:', time.time() - time1)
         return current, breaker
 
     def goOneMonth(self, current, topdf, bonddf, allIndex):
@@ -681,12 +676,14 @@ domestic = Shares('국내 주식 코스피', shareNum=200, moneyRate=1, shareLis
 # domestic = Shares('domestic', shareNum=domesticListNum, moneyRate=1, shareList=list(topcap[str(current.year)]['Name']))
 
 ag = AssetGroup(st)
-ag.addShares([domestic, bondETF])
+ag.addShares([domestic])
 # ag.addShares([bondETF, foreignETF, inverseETF, domesticETF, domestic])
 
 while endDate > current:
     print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
     print('simulate...', current)
+    start1 = time.time()
+
     # plusMoney = 500000
     # print(plusMoney,'씩 적립')
     # money+=plusMoney
@@ -735,7 +732,7 @@ while endDate > current:
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '투자활동으로인한현금흐름', True, 20)
     # target = st.getFactorList(domestic, current, topdf[target], factordf, '재무활동으로인한현금흐름', True, 30)
     st.calculateFactorList(domestic, target)
-    st.calculateFactorList(bondETF, ['KODEX 국고채3년','KOSEF 국고채10년'])
+    # st.calculateFactorList(bondETF, ['KODEX 국고채3년','KOSEF 국고채10년'])
     #TARGET
     ag.calculateAllInvestMoney(wallet)
     ag.buyAll(wallet, current, topdf)
@@ -758,6 +755,7 @@ while endDate > current:
     moneydf = pd.DataFrame( [[wallet.stockMoney + wallet.restMoney, wallet.stockMoney, wallet.restMoney]],index=[current], columns=['total', 'stock', 'rest'])
     moneySum = pd.concat([moneySum, moneydf], sort=False)
     money = wallet.stockMoney + wallet.restMoney
+    print("걸린시간 :", time.time() - start1)  # 현재시각 - 시작시간 = 실행 시간
     print('=================================================')
     print('total', money, wallet.stockMoney, wallet.restMoney)
     print('=================================================')
