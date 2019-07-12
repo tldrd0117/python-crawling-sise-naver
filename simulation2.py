@@ -553,7 +553,8 @@ class Wallet:
         before = current + pd.Timedelta(-1, unit='M')
         beforeloc = topdf.index.get_loc(before, method='ffill')
         beforedf = target.iloc[beforeloc:currentloc]
-        return 1 - (beforedf.max() - beforedf.min()) / beforedf.mean()
+        # return 1 - (((beforedf.max() - beforedf.min()) / beforedf.mean())*1)
+        return 0
 
     def goOneMonthAndlossCut(self, current, topdf, allIndex, ag):
         nextDate = current + pd.Timedelta(1, unit='M')
@@ -799,6 +800,8 @@ print(portfolio[-1]/portfolio.std())
 print((portfolio/portfolio.shift(1)))
 # print(portfolio.std())
 
+# In[7]: 통계 결과
+
 # print('연간 수익률', pe)
 print('연평균 수익률',((portfolio[-1]**(1/투자기간))*100-100))
 
@@ -811,7 +814,13 @@ losscutdf = ag.losscutDf
 kospiComp = kospidf['종가']
 beforeKospiComp = kospiComp.shift(1)
 kospiComp = (kospiComp - beforeKospiComp) / beforeKospiComp + 1
+# print(moneySum['total'].loc[losscutdf.index])
+totaldf = moneySum['stock'].loc[losscutdf.index]
+beforetotaldf = totaldf.shift(1)
+totalComp = (totaldf - beforetotaldf) / beforetotaldf + 1
+losscutdf['실제'] = totalComp
 losscutdf['코스피'] = kospiComp.loc[losscutdf.index]
+print('손절승률',np.where(losscutdf['실제']>losscutdf['전체평균'])[0].size/len(losscutdf.index)*100, '%')
 losscutdf
 
 # In[7]: 그래프
