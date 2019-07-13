@@ -3,8 +3,8 @@ import urllib3
 import bs4
 from functools import reduce
 import itertools
-from crawler.data.NaverStockResultData import NaverStockResultData
-from crawler.data.NaverDate import NaverDate
+from data.NaverStockResultData import NaverStockResultData
+from data.NaverDate import NaverDate
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning) 
 http = urllib3.PoolManager()
